@@ -24,9 +24,10 @@ class RegisteredUserController extends Controller
     /**
      * Display the registration view.
      */
-    public function create(): View
+    public function create(Request $request): View
     {
-        return view('auth.register');
+        $plan = $request->query('plan', 'starter');
+        return view('auth.register', compact('plan'));
     }
 
     /**
@@ -40,12 +41,13 @@ class RegisteredUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'plan' => ['nullable', 'string', 'in:starter,professional,business,enterprise'],
         ]);
 
         $user = DB::transaction(function () use ($request): User {
             $tenant = Tenant::query()->create([
                 'name' => trim((string) $request->name)."'s Barbershop",
-                'plan_tier' => 'starter',
+                'plan_tier' => $request->input('plan', 'starter'),
                 'status' => 'pending',
                 'primary_domain' => null,
                 'database_name' => null,
@@ -85,6 +87,11 @@ class RegisteredUserController extends Controller
         event(new Registered($user));
 
         Auth::login($user);
+
+        if ($request->filled('plan')) {
+            $request->session()->put('pending_setup_plan', $request->input('plan'));
+            return redirect()->route('manager.setup');
+        }
 
         return redirect(route('dashboard', absolute: false));
     }

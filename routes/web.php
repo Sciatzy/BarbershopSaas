@@ -9,6 +9,7 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ManagerDashboardController;
+use App\Http\Controllers\ManagerSetupController;
 use App\Http\Controllers\PayMongoWebhookController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\WalkInWorkController;
@@ -34,6 +35,8 @@ Route::middleware(['auth', 'verified', 'role:Platform Admin'])->group(function (
 
 Route::middleware(['auth', 'verified', 'role:Barbershop Admin|Branch Manager'])->group(function () {
     Route::get('/manager', [ManagerDashboardController::class, 'index'])->name('manager.dashboard');
+    Route::get('/manager/setup', [ManagerSetupController::class, 'create'])->name('manager.setup');
+    Route::post('/manager/setup', [ManagerSetupController::class, 'store'])->name('manager.setup.store');
     Route::middleware('active_plan')->group(function () {
         Route::get('/manager/barbers', [BarberManagementController::class, 'index'])->name('manager.barbers.index');
         Route::post('/manager/barbers', [BarberManagementController::class, 'store'])->name('manager.barbers.store');

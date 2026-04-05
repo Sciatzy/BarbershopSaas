@@ -5,6 +5,33 @@
     </x-slot>
 
     <div class="py-8">
+    @if(session('auto_checkout_plan') && $tenant)
+        @php
+            $autoPlan = session('auto_checkout_plan');
+            $autoPlanRoute = collect($planOptions)->firstWhere('tier', $autoPlan)['checkout_route'] ?? null;
+        @endphp
+        @if($autoPlanRoute)
+            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div class="bg-white p-8 rounded-2xl shadow-xl flex flex-col items-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-4 border-amber-500 border-t-transparent mb-4"></div>
+                    <p class="text-slate-800 font-semibold text-lg">Redirecting to Checkout...</p>
+                    <p class="text-slate-500 text-sm mt-2">Please wait while we prepare your {{ ucfirst($autoPlan) }} plan payment.</p>
+                    <form method="POST" action="{{ route($autoPlanRoute, ['tenant' => $tenant->id]) }}" id="autoCheckoutForm" class="hidden">
+                        @csrf
+                    </form>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            setTimeout(function() {
+                                document.getElementById('autoCheckoutForm').submit();
+                            }, 1500);
+                        });
+                    </script>
+                </div>
+            </div>
+            @php session()->forget('auto_checkout_plan'); @endphp
+        @endif
+    @endif
+
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             @if (session('plan_required'))
                 <div class="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">

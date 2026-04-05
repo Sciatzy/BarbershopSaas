@@ -2,6 +2,9 @@
     <form method="POST" action="{{ route('register') }}">
         @csrf
 
+        <!-- Plan specific -->
+        <input type="hidden" name="plan" value="{{ $plan ?? 'starter' }}">
+
         <!-- Name -->
         <div>
             <x-input-label for="name" :value="__('Name')" />

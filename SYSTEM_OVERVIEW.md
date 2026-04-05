@@ -62,7 +62,59 @@ This project supports:
 - resources/views/billing: plan and billing UI
 - routes/web.php: core web routes and middleware mapping
 
-## 6. Before Commit Checklist
+## 6. Local Redirect Links (for Localhost Testing)
+Base URL:
+- http://127.0.0.1:8000
+
+Auth pages:
+- Login: http://127.0.0.1:8000/login
+- Register: http://127.0.0.1:8000/register
+- Role redirect entry point after login: http://127.0.0.1:8000/dashboard
+
+Role destination routes after `/dashboard`:
+- Platform Admin -> http://127.0.0.1:8000/admin
+- Tenant side (Barbershop Admin / Branch Manager) -> http://127.0.0.1:8000/manager
+- Customer -> http://127.0.0.1:8000/booking
+
+Other useful checks:
+- Barber dashboard: http://127.0.0.1:8000/barber
+- Billing plans (Barbershop Admin): http://127.0.0.1:8000/billing/plans
+- Plan required page: http://127.0.0.1:8000/billing/plan-required
+- PayMongo webhook health check: http://127.0.0.1:8000/paymongo/webhook
+
+## 7. Quick Walkthrough (Admin, Tenant, Customer)
+Use this sequence to validate role paths and gate behavior quickly.
+
+1. General login + role redirect behavior
+- Go to http://127.0.0.1:8000/login and sign in with a test account.
+- Visit http://127.0.0.1:8000/dashboard.
+- Confirm redirect by role:
+	- Platform Admin -> `/admin`
+	- Barbershop Admin or Branch Manager -> `/manager`
+	- Customer -> `/booking`
+
+2. Platform Admin flow
+- Open http://127.0.0.1:8000/admin.
+- Validate tenant list loads.
+- Perform tenant update/status changes (pending/active/inactive/suspended).
+- Run provisioning action if needed (`/admin/tenants/{tenant}/provision-database`).
+
+3. Tenant flow (Barbershop Admin / Branch Manager)
+- Open http://127.0.0.1:8000/manager.
+- Check dashboard cards, appointments, and operational widgets.
+- Open barber management: http://127.0.0.1:8000/manager/barbers (requires active plan).
+- As Barbershop Admin, open billing plans: http://127.0.0.1:8000/billing/plans.
+
+4. Customer flow
+- Open http://127.0.0.1:8000/booking.
+- Confirm booking list/form loads under active plan conditions.
+- Submit booking and verify it appears in tenant operational views.
+
+5. Access/plan gating sanity
+- If tenant is inactive/suspended or lacks active subscription, protected routes should block and route users to the appropriate restriction/plan-required experience.
+- Re-activate tenant and verify protected routes become available again.
+
+## 8. Before Commit Checklist
 Use this quick checklist before pushing to GitHub:
 
 1. Functional sanity
@@ -84,7 +136,7 @@ Use this quick checklist before pushing to GitHub:
 - No temporary patch scripts included
 - Relevant files are staged (and only intended files)
 
-## 7. Commit Steps
+## 9. Commit Steps
 From the project root:
 
 ```bash
@@ -115,5 +167,5 @@ Push to GitHub:
 git push origin main
 ```
 
-## 8. Suggested Repo Description (Optional)
+## 10. Suggested Repo Description (Optional)
 Multi-tenant Barbershop SaaS built with Laravel, including tenant lifecycle management, role-based access, subscription billing via PayMongo, and admin/manager operational dashboards.
