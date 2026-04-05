@@ -51,6 +51,11 @@ class Tenant extends Model
         return $this->hasOne(Subscription::class, 'tenant_id')->latestOfMany();
     }
 
+    public function owner(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_user_id');
+    }
+
     public function hasActivePlan(): bool
     {
         if (($this->status ?? 'pending') !== 'active') {

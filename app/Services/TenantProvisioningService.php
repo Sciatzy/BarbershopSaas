@@ -11,6 +11,39 @@ use Throwable;
 
 class TenantProvisioningService
 {
+    public function ensureDomain(Tenant $tenant): string
+    {
+        $currentDomain = strtolower(trim((string) $tenant->primary_domain));
+
+        if ($currentDomain !== '') {
+            return $currentDomain;
+        }
+
+        $host = strtolower((string) parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST));
+
+        if ($host === '') {
+            $host = 'localhost';
+        }
+
+        $slug = Str::slug((string) $tenant->name);
+
+        if ($slug === '') {
+            $slug = 'tenant';
+        }
+
+        do {
+            $candidate = sprintf('%s-%s.%s', $slug, strtolower(Str::random(6)), $host);
+            $exists = Tenant::query()
+                ->where('primary_domain', $candidate)
+                ->where('id', '!=', $tenant->id)
+                ->exists();
+        } while ($exists);
+
+        $tenant->forceFill(['primary_domain' => $candidate])->save();
+
+        return $candidate;
+    }
+
     public function suggestDatabaseName(string $tenantName): string
     {
         $slug = Str::of($tenantName)->lower()->replaceMatches('/[^a-z0-9]+/', '_')->trim('_')->value();
@@ -19,7 +52,7 @@ class TenantProvisioningService
             $slug = 'tenant';
         }
 
-        return 'bs_tenant_'.$slug;
+        return substr('bs_tenant_'.$slug, 0, 64);
     }
 
     /**
@@ -27,7 +60,7 @@ class TenantProvisioningService
      */
     public function provisionDatabase(Tenant $tenant): array
     {
-        $databaseName = (string) ($tenant->database_name ?: $this->suggestDatabaseName((string) $tenant->name));
+        $databaseName = $this->resolveProvisioningDatabaseName($tenant);
 
         try {
             DB::statement(sprintf('CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', str_replace('`', '', $databaseName)));
@@ -106,5 +139,46 @@ class TenantProvisioningService
                 ]
             );
         }
+    }
+
+    private function resolveProvisioningDatabaseName(Tenant $tenant): string
+    {
+        $baseName = (string) ($tenant->database_name ?: $this->suggestDatabaseName((string) $tenant->name));
+        $baseName = Str::of($baseName)
+            ->lower()
+            ->replaceMatches('/[^a-z0-9_]+/', '_')
+            ->trim('_')
+            ->value();
+
+        if ($baseName === '') {
+            $baseName = 'bs_tenant_'.strtolower(Str::random(8));
+        }
+
+        $baseName = substr($baseName, 0, 64);
+
+        $candidate = $baseName;
+        $attempt = 0;
+
+        while ($this->databaseNameAlreadyUsed($tenant, $candidate)) {
+            $attempt++;
+            $suffix = '_'.str_pad((string) $attempt, 2, '0', STR_PAD_LEFT);
+            $candidate = substr($baseName, 0, 64 - strlen($suffix)).$suffix;
+
+            if ($attempt > 99) {
+                $suffix = '_'.strtolower(Str::random(6));
+                $candidate = substr($baseName, 0, 64 - strlen($suffix)).$suffix;
+                break;
+            }
+        }
+
+        return $candidate;
+    }
+
+    private function databaseNameAlreadyUsed(Tenant $tenant, string $databaseName): bool
+    {
+        return Tenant::query()
+            ->where('id', '!=', $tenant->id)
+            ->whereRaw('LOWER(database_name) = ?', [strtolower($databaseName)])
+            ->exists();
     }
 }

@@ -10,7 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
 class AdminTenantController extends Controller
@@ -26,22 +26,24 @@ class AdminTenantController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'owner_name' => ['required', 'string', 'max:255'],
             'owner_email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'owner_password' => ['required', Password::defaults()],
             'plan_tier' => ['required', 'in:starter,professional,business,enterprise'],
             'primary_domain' => ['nullable', 'string', 'max:255', 'unique:tenants,primary_domain'],
             'database_name' => ['nullable', 'string', 'max:255', 'unique:tenants,database_name'],
-            'auto_activate' => ['nullable', 'boolean'],
-            'auto_provision_db' => ['nullable', 'boolean'],
         ]);
 
-        [$tenant, $owner] = DB::transaction(function () use ($validated): array {
+        $generatedPassword = Str::password(16);
+        $preferredDomain = $this->normalizeDomain((string) ($validated['primary_domain'] ?? ''));
+        $preferredDatabase = $this->normalizeDatabaseName((string) ($validated['database_name'] ?? ''));
+        $assignedDomain = $preferredDomain !== '' ? $preferredDomain : null;
+
+        [$tenant, $owner] = DB::transaction(function () use ($validated, $generatedPassword, $assignedDomain, $preferredDatabase): array {
             $tenant = Tenant::query()->create([
                 'name' => $validated['name'],
                 'plan_tier' => $validated['plan_tier'],
-                'status' => ! empty($validated['auto_activate']) ? 'active' : 'pending',
-                'primary_domain' => $validated['primary_domain'] ?? null,
-                'database_name' => $validated['database_name'] ?? null,
-                'activated_at' => ! empty($validated['auto_activate']) ? now() : null,
+                'status' => 'active',
+                'primary_domain' => $assignedDomain,
+                'database_name' => $preferredDatabase !== '' ? $preferredDatabase : null,
+                'activated_at' => now(),
                 'deactivated_at' => null,
             ]);
 
@@ -49,7 +51,7 @@ class AdminTenantController extends Controller
                 'tenant_id' => $tenant->id,
                 'name' => $validated['owner_name'],
                 'email' => $validated['owner_email'],
-                'password' => Hash::make($validated['owner_password']),
+                'password' => Hash::make($generatedPassword),
             ]);
 
             Role::findOrCreate('Barbershop Admin', 'web');
@@ -60,18 +62,32 @@ class AdminTenantController extends Controller
             return [$tenant, $owner];
         });
 
-        $message = 'Tenant created successfully.';
+        $assignedDomain = $this->provisioning->ensureDomain($tenant);
+        $result = $this->provisioning->provisionDatabase($tenant);
 
-        if (! empty($validated['auto_provision_db'])) {
-            $result = $this->provisioning->provisionDatabase($tenant);
-            $message .= ' '.$result['message'];
-        }
+        $systemUrl = str_starts_with($assignedDomain, 'http://') || str_starts_with($assignedDomain, 'https://')
+            ? $assignedDomain
+            : 'http://'.$assignedDomain;
 
-        $this->notifier->notifyOwner(
-            $tenant,
-            'Your tenant account is ready',
-            "Hi {$owner->name}, your tenant {$tenant->name} has been created. Plan: {$tenant->plan_tier}."
+        $loginUrl = url('/login');
+
+        $this->notifier->notifyUserWithDetails(
+            $owner,
+            'Your Manager Account Credentials',
+            "Hi {$owner->name}, your manager account for {$tenant->name} has been created and activated.",
+            [
+                'Login Email' => $owner->email,
+                'Temporary Password' => $generatedPassword,
+                'Login URL' => $loginUrl,
+                'Assigned Domain' => $assignedDomain,
+                'System URL' => $systemUrl,
+                'Database Name' => (string) $result['database_name'],
+                'Plan Tier' => ucfirst((string) $tenant->plan_tier),
+            ],
+            'Please sign in and change your password immediately.'
         );
+
+        $message = 'Tenant created successfully. '.$result['message'];
 
         return redirect()->route('admin.dashboard')->with('billing_status', $message);
     }
@@ -86,6 +102,9 @@ class AdminTenantController extends Controller
             'status' => ['required', 'in:pending,active,inactive,suspended'],
         ]);
 
+        $normalizedDomain = $this->normalizeDomain((string) ($validated['primary_domain'] ?? ''));
+        $normalizedDatabase = $this->normalizeDatabaseName((string) ($validated['database_name'] ?? ''));
+
         $wasActive = $tenant->status === 'active';
         $previousStatus = (string) $tenant->status;
         $previousTier = (string) $tenant->plan_tier;
@@ -93,8 +112,8 @@ class AdminTenantController extends Controller
         $tenant->forceFill([
             'name' => $validated['name'],
             'plan_tier' => $validated['plan_tier'],
-            'primary_domain' => $validated['primary_domain'] ?? null,
-            'database_name' => $validated['database_name'] ?? null,
+            'primary_domain' => $normalizedDomain !== '' ? $normalizedDomain : null,
+            'database_name' => $normalizedDatabase !== '' ? $normalizedDatabase : null,
             'status' => $validated['status'],
             'activated_at' => $validated['status'] === 'active' ? ($tenant->activated_at ?? now()) : $tenant->activated_at,
             'deactivated_at' => in_array($validated['status'], ['inactive', 'suspended'], true) ? now() : null,
@@ -139,11 +158,49 @@ class AdminTenantController extends Controller
         }
 
         if (! $wasActive && $tenant->status === 'active') {
-            $this->notifier->notifyOwner(
-                $tenant,
-                'Tenant Activated',
-                "Your tenant {$tenant->name} has been activated."
-            );
+            $assignedDomain = $this->provisioning->ensureDomain($tenant);
+
+            $provisioningResult = null;
+
+            if ($tenant->database_provisioned_at === null) {
+                $provisioningResult = $this->provisioning->provisionDatabase($tenant);
+            }
+
+            if ($provisioningResult !== null) {
+                $tenant->refresh();
+
+                $subject = $provisioningResult['ok']
+                    ? 'Tenant Activated and Provisioned'
+                    : 'Tenant Activated - Provisioning Requires Follow-up';
+
+                $intro = $provisioningResult['ok']
+                    ? "Your tenant {$tenant->name} has been activated and environment setup is complete."
+                    : "Your tenant {$tenant->name} has been activated, but database provisioning needs manual follow-up.";
+
+                $this->notifier->notifyOwnerWithDetails(
+                    $tenant,
+                    $subject,
+                    $intro,
+                    [
+                        'Tenant Name' => (string) $tenant->name,
+                        'Current Status' => ucfirst((string) $tenant->status),
+                        'Plan Tier' => ucfirst((string) $tenant->plan_tier),
+                        'Assigned Domain' => $assignedDomain,
+                        'Login URL' => (string) route('login'),
+                        'Database Name' => (string) ($provisioningResult['database_name'] ?? $tenant->database_name ?? 'n/a'),
+                        'Provisioning Result' => (string) $provisioningResult['message'],
+                    ],
+                    $provisioningResult['ok']
+                        ? 'You can proceed with normal onboarding and operations.'
+                        : 'Please contact platform support so provisioning can be completed safely.'
+                );
+            } else {
+                $this->notifier->notifyOwner(
+                    $tenant,
+                    'Tenant Activated',
+                    "Your tenant {$tenant->name} has been activated."
+                );
+            }
         }
 
         if ($previousTier !== (string) $tenant->plan_tier) {
@@ -195,5 +252,30 @@ class AdminTenantController extends Controller
             $result['ok'] ? 'billing_status' : 'billing_error',
             $result['message']
         );
+    }
+
+    private function normalizeDomain(string $domain): string
+    {
+        $domain = strtolower(trim($domain));
+
+        if ($domain === '') {
+            return '';
+        }
+
+        if (str_starts_with($domain, 'http://') || str_starts_with($domain, 'https://')) {
+            $parsedHost = (string) parse_url($domain, PHP_URL_HOST);
+            $domain = $parsedHost !== '' ? $parsedHost : $domain;
+        }
+
+        return trim($domain, " \t\n\r\0\x0B/");
+    }
+
+    private function normalizeDatabaseName(string $databaseName): string
+    {
+        return Str::of($databaseName)
+            ->lower()
+            ->replaceMatches('/[^a-z0-9_]+/', '_')
+            ->trim('_')
+            ->value();
     }
 }

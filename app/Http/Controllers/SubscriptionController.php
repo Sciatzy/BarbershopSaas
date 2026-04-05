@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Services\PayMongoCheckoutService;
 use App\Services\TenantLifecycleNotifier;
 use App\Services\TenantLimitValidator;
+use App\Services\TenantProvisioningService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,7 @@ class SubscriptionController extends Controller
         private PayMongoCheckoutService $payMongoCheckoutService,
         private TenantLimitValidator $tenantLimitValidator,
         private TenantLifecycleNotifier $notifier,
+        private TenantProvisioningService $provisioning,
     ) {}
 
     /**
@@ -275,6 +277,39 @@ class SubscriptionController extends Controller
 
             $this->tenantLimitValidator->forgetTenantCounts((string) $tenant->id);
         });
+
+        $tenant->refresh();
+        $assignedDomain = $this->provisioning->ensureDomain($tenant);
+        $systemUrl = str_starts_with($assignedDomain, 'http://') || str_starts_with($assignedDomain, 'https://')
+            ? $assignedDomain
+            : 'http://'.$assignedDomain;
+
+        if ($tenant->database_provisioned_at !== null) {
+            return;
+        }
+
+        $result = $this->provisioning->provisionDatabase($tenant);
+        $tenant->refresh();
+
+        $this->notifier->notifyOwnerWithDetails(
+            $tenant,
+            $result['ok'] ? 'Subscription Activated - Environment Ready' : 'Subscription Activated - Provisioning Requires Follow-up',
+            $result['ok']
+                ? "Your tenant {$tenant->name} is active and provisioning is complete."
+                : "Your tenant {$tenant->name} is active, but database provisioning needs manual follow-up.",
+            [
+                'Tenant Name' => (string) $tenant->name,
+                'Plan Tier' => ucfirst($planTier),
+                'Assigned Domain' => $assignedDomain,
+                'System URL' => $systemUrl,
+                'Login URL' => (string) route('login'),
+                'Database Name' => (string) ($result['database_name'] ?? $tenant->database_name ?? 'n/a'),
+                'Provisioning Result' => (string) $result['message'],
+            ],
+            $result['ok']
+                ? 'You can now proceed with branch setup and daily operations.'
+                : 'Please contact platform support so provisioning can be completed safely.'
+        );
     }
 
     /**

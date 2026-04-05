@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\TenantLifecycleNotifier;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,8 @@ use Spatie\Permission\Models\Role;
 
 class RegisteredUserController extends Controller
 {
+    public function __construct(private TenantLifecycleNotifier $notifier) {}
+
     /**
      * Display the registration view.
      */
@@ -43,6 +46,11 @@ class RegisteredUserController extends Controller
             $tenant = Tenant::query()->create([
                 'name' => trim((string) $request->name)."'s Barbershop",
                 'plan_tier' => 'starter',
+                'status' => 'pending',
+                'primary_domain' => null,
+                'database_name' => null,
+                'activated_at' => null,
+                'deactivated_at' => null,
             ]);
 
             $user = User::query()->create([
@@ -54,6 +62,22 @@ class RegisteredUserController extends Controller
 
             Role::findOrCreate('Barbershop Admin', 'web');
             $user->assignRole('Barbershop Admin');
+
+            $tenant->forceFill(['owner_user_id' => $user->id])->save();
+
+            $this->notifier->notifyUserWithDetails(
+                $user,
+                'Registration Received - Pending Activation',
+                "Hi {$user->name}, your account registration has been received.",
+                [
+                    'Account Status' => 'Pending',
+                    'Tenant Name' => (string) $tenant->name,
+                    'Next Step' => 'Wait for platform admin approval or subscribe to a plan to activate your account.',
+                    'Login URL' => (string) route('login'),
+                    'Billing Plans URL' => (string) route('billing.plans'),
+                ],
+                'Database and domain provisioning will only happen after activation.'
+            );
 
             return $user;
         });
