@@ -25,6 +25,11 @@ class TenantProvisioningService
             $host = 'localhost';
         }
 
+        // Subdomains cannot be generated from raw loopback IP hosts.
+        if (in_array($host, ['127.0.0.1', '::1'], true)) {
+            $host = 'localhost';
+        }
+
         $slug = Str::slug((string) $tenant->name);
 
         if ($slug === '') {
@@ -42,6 +47,32 @@ class TenantProvisioningService
         $tenant->forceFill(['primary_domain' => $candidate])->save();
 
         return $candidate;
+    }
+
+    public function tenantUrl(string $tenantDomain, string $path = ''): string
+    {
+        $tenantDomain = trim(strtolower($tenantDomain));
+        $appUrl = (string) config('app.url', 'http://localhost');
+        $scheme = (string) parse_url($appUrl, PHP_URL_SCHEME);
+        $port = parse_url($appUrl, PHP_URL_PORT);
+
+        if ($scheme === '') {
+            $scheme = 'http';
+        }
+
+        $portSegment = '';
+
+        if (is_int($port) && ! in_array($port, [80, 443], true)) {
+            $portSegment = ':'.$port;
+        }
+
+        $normalizedPath = '/'.ltrim($path, '/');
+
+        if ($normalizedPath === '/') {
+            $normalizedPath = '';
+        }
+
+        return sprintf('%s://%s%s%s', $scheme, $tenantDomain, $portSegment, $normalizedPath);
     }
 
     public function suggestDatabaseName(string $tenantName): string

@@ -280,9 +280,9 @@ class SubscriptionController extends Controller
 
         $tenant->refresh();
         $assignedDomain = $this->provisioning->ensureDomain($tenant);
-        $systemUrl = str_starts_with($assignedDomain, 'http://') || str_starts_with($assignedDomain, 'https://')
-            ? $assignedDomain
-            : 'http://'.$assignedDomain;
+        $systemUrl = $this->provisioning->tenantUrl($assignedDomain);
+        $loginUrl = $this->provisioning->tenantUrl($assignedDomain, '/login');
+        $managerUrl = $this->provisioning->tenantUrl($assignedDomain, '/manager');
 
         if ($tenant->database_provisioned_at !== null) {
             return;
@@ -302,7 +302,8 @@ class SubscriptionController extends Controller
                 'Plan Tier' => ucfirst($planTier),
                 'Assigned Domain' => $assignedDomain,
                 'System URL' => $systemUrl,
-                'Login URL' => (string) route('login'),
+                'Login URL' => $loginUrl,
+                'Manager Dashboard URL' => $managerUrl,
                 'Database Name' => (string) ($result['database_name'] ?? $tenant->database_name ?? 'n/a'),
                 'Provisioning Result' => (string) $result['message'],
             ],

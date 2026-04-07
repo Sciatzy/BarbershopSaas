@@ -35,12 +35,29 @@
             <div class="absolute inset-0 flex items-center">
                 <div class="w-full border-t border-gray-100"></div>
             </div>
-            <div class="relative bg-white px-3 text-[10px] tracking-wider text-gray-300 font-medium">
-                or Login with Email
+            <div class="relative bg-white px-3 text-[10px] tracking-wider text-gray-300 font-medium z-10 w-full text-center">
+                <span>or Login with Email</span>
             </div>
         </div>
 
-        <form method="POST" action="{{ route('login') }}" class="space-y-5">
+        @php
+            $currentTenant = request()->attributes->get('currentTenant');
+            $isTenantLogin = $currentTenant !== null;
+        @endphp
+
+        <div class="mb-4 text-center">
+            @if ($isTenantLogin)
+                <a href="{{ route('customer.register', [], false) }}" class="text-sm font-semibold text-[#5e5ce4] hover:text-[#4a48b5] transition-colors rounded p-1 mb-2 inline-block">
+                    ↳ Are you a new Customer? Sign up here.
+                </a>
+            @else
+                <a href="{{ route('register', [], false) }}" class="text-sm font-semibold text-[#5e5ce4] hover:text-[#4a48b5] transition-colors rounded p-1 mb-2 inline-block">
+                    ↳ New barbershop owner? Register your tenant here.
+                </a>
+            @endif
+        </div>
+
+        <form method="POST" action="{{ route('login', [], false) }}" class="space-y-5">
             @csrf
 
             <!-- Email Address -->
@@ -60,7 +77,7 @@
 
                 <div class="flex justify-end mt-2 pr-1">
                     @if (Route::has('password.request'))
-                        <a class="text-[11px] font-semibold text-[#5e5ce4] hover:text-[#4a48b5] hover:underline transition-colors" href="{{ route('password.request') }}">
+                        <a class="text-[11px] font-semibold text-[#5e5ce4] hover:text-[#4a48b5] hover:underline transition-colors" href="{{ route('password.request', [], false) }}">
                             Forgot Password?
                         </a>
                     @endif

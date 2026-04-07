@@ -88,11 +88,8 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        if ($request->filled('plan')) {
-            $request->session()->put('pending_setup_plan', $request->input('plan'));
-            return redirect()->route('manager.setup');
-        }
+        $request->session()->put('pending_setup_plan', $request->input('plan', 'starter'));
 
-        return redirect(route('dashboard', absolute: false));
+        return redirect(route('manager.setup', [], false));
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Tenant;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -50,6 +51,9 @@ class ManagerDashboardController extends Controller
         $canManageBilling = $user->hasRole('Barbershop Admin');
 
         $tenant = null;
+        $preferredDomain = '';
+        $domainSuffix = 'localhost';
+        $domainPreviewUrl = null;
         $subscription = null;
         $hasActivePlan = false;
         $mustContactAdminForReactivation = false;
@@ -69,6 +73,24 @@ class ManagerDashboardController extends Controller
             $tenant = Tenant::query()
                 ->with('latestCashierSubscription')
                 ->find($tenantId);
+
+            $domainHost = $this->resolveDomainBaseHost($request);
+            $domainPortSegment = $this->resolveDomainPortSegment($request);
+            $domainSuffix = $domainHost.$domainPortSegment;
+
+            if ($tenant?->primary_domain) {
+                $domainRoot = strtolower((string) $tenant->primary_domain);
+
+                if (str_ends_with($domainRoot, '.'.$domainHost)) {
+                    $preferredDomain = (string) substr($domainRoot, 0, -strlen('.'.$domainHost));
+                }
+
+                $domainUrl = str_starts_with($domainRoot, 'http://') || str_starts_with($domainRoot, 'https://')
+                    ? $domainRoot
+                    : $request->getScheme().'://'.$domainRoot.(str_contains($domainRoot, ':') ? '' : $domainPortSegment);
+
+                $domainPreviewUrl = $domainUrl;
+            }
 
             $subscription = $tenant?->latestCashierSubscription;
             $hasActivePlan = $tenant?->hasActivePlan() ?? false;
@@ -121,6 +143,29 @@ class ManagerDashboardController extends Controller
                 's.name as service_name',
             ]);
 
+        $availedServicesQuery = DB::table('appointments as a')
+            ->leftJoin('users as customer', 'customer.id', '=', 'a.customer_id')
+            ->leftJoin('services as s', 's.id', '=', 'a.service_id')
+            ->where('a.tenant_id', $tenantId)
+            ->whereNotNull('a.customer_id');
+
+        if ($user->hasRole('Branch Manager') && ! empty($user->branch_id)) {
+            $availedServicesQuery->where('a.branch_id', $user->branch_id);
+        }
+
+        $availedServices = $availedServicesQuery
+            ->orderByDesc('a.booked_at')
+            ->orderByDesc('a.created_at')
+            ->limit(20)
+            ->get([
+                'a.id',
+                'a.booked_at',
+                'a.status',
+                'a.total_price',
+                'customer.name as customer_name',
+                's.name as service_name',
+            ]);
+
         $barberPointsQuery = DB::table('point_transactions as pt')
             ->join('users as u', 'u.id', '=', 'pt.barber_id')
             ->where('pt.tenant_id', $tenantId);
@@ -161,7 +206,11 @@ class ManagerDashboardController extends Controller
             'appointments' => $appointments,
             'barberPoints' => $barberPoints,
             'services' => $services,
+            'availedServices' => $availedServices,
             'tenant' => $tenant,
+            'preferredDomain' => $preferredDomain,
+            'domainSuffix' => $domainSuffix,
+            'domainPreviewUrl' => $domainPreviewUrl,
             'subscription' => $subscription,
             'hasActivePlan' => $hasActivePlan,
             'mustContactAdminForReactivation' => $mustContactAdminForReactivation,
@@ -171,5 +220,54 @@ class ManagerDashboardController extends Controller
             'barbersForWalkIns' => $barbersForWalkIns,
             'branchesForWalkIns' => $branchesForWalkIns,
         ]);
+    }
+
+    public function updateDomain(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $tenantId = (string) ($user->tenant_id ?? '');
+
+        if ($tenantId === '') {
+            return redirect()->route('manager.dashboard')->with('billing_error', 'No tenant found for this account.');
+        }
+
+        $validated = $request->validate([
+            'preferred_domain' => ['required', 'string', 'max:50', 'regex:/^[a-z0-9-]+$/'],
+        ]);
+
+        $tenant = Tenant::query()->findOrFail($tenantId);
+        $host = $this->resolveDomainBaseHost($request);
+        $preferredDomain = strtolower((string) $validated['preferred_domain']);
+        $tenant->primary_domain = $preferredDomain.'.'.$host;
+        $tenant->save();
+
+        $displayDomain = $tenant->primary_domain.$this->resolveDomainPortSegment($request);
+
+        return redirect()->route('manager.dashboard')->with('billing_status', 'Domain updated successfully to '.$displayDomain.'.');
+    }
+
+    private function resolveDomainBaseHost(Request $request): string
+    {
+        $appHost = strtolower((string) parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST));
+        $requestHost = strtolower((string) $request->getHost());
+        $host = $appHost !== '' ? $appHost : $requestHost;
+
+        if ($host === '' || in_array($host, ['127.0.0.1', '::1'], true)) {
+            return 'localhost';
+        }
+
+        return $host;
+    }
+
+    private function resolveDomainPortSegment(Request $request): string
+    {
+        $appPort = parse_url((string) config('app.url', ''), PHP_URL_PORT);
+        $port = is_int($appPort) ? $appPort : (int) $request->getPort();
+
+        if (in_array($port, [80, 443], true)) {
+            return '';
+        }
+
+        return ':'.$port;
     }
 }

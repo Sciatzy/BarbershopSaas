@@ -52,7 +52,7 @@
 
                     <div>
                         <label class="block text-sm font-medium text-slate-600" for="primary_domain">Primary Domain</label>
-                        <input id="primary_domain" name="primary_domain" type="text" value="{{ old('primary_domain') }}" placeholder="tenant.example.com" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        <input id="primary_domain" name="primary_domain" type="text" value="{{ old('primary_domain') }}" placeholder="myshop.localhost:8000" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
                     </div>
 
                     <div>
@@ -136,12 +136,18 @@
                                     <td class="px-4 py-3 text-slate-600">
                                         @if ($tenant->primary_domain)
                                             @php
-                                                $domainUrl = str_starts_with($tenant->primary_domain, 'http://') || str_starts_with($tenant->primary_domain, 'https://')
-                                                    ? $tenant->primary_domain
-                                                    : 'http://'.$tenant->primary_domain;
+                                                $rawDomain = (string) $tenant->primary_domain;
+                                                $appPort = parse_url((string) config('app.url', ''), PHP_URL_PORT);
+                                                $resolvedPort = is_int($appPort) ? $appPort : (int) request()->getPort();
+                                                $portSegment = in_array($resolvedPort, [80, 443], true) ? '' : ':'.$resolvedPort;
+
+                                                $domainWithoutScheme = preg_replace('#^https?://#', '', $rawDomain) ?? $rawDomain;
+                                                $hasExplicitPort = preg_match('/:\d+$/', $domainWithoutScheme) === 1;
+                                                $displayDomain = $hasExplicitPort ? $domainWithoutScheme : $domainWithoutScheme.$portSegment;
+                                                $domainUrl = 'http://'.$displayDomain;
                                             @endphp
                                             <a href="{{ $domainUrl }}" target="_blank" rel="noopener" class="text-indigo-700 hover:text-indigo-600 hover:underline">
-                                                {{ $tenant->primary_domain }}
+                                                {{ $displayDomain }}
                                             </a>
                                         @else
                                             -
@@ -161,25 +167,76 @@
                                     </td>
                                     <td class="px-4 py-3 text-slate-600">{{ number_format($planMrrPhp[$tenant->plan_tier] ?? 0, 2) }}</td>
                                     <td class="px-4 py-3 text-slate-600">{{ optional($tenant->created_at)->format('Y-m-d') }}</td>
-                                    <td class="px-4 py-3 text-slate-600">
-                                        <form method="POST" action="{{ route('admin.tenants.update', ['tenant' => $tenant->id]) }}" class="grid grid-cols-1 gap-2">
-                                            @csrf
-                                            @method('PATCH')
-                                            <input type="text" name="name" value="{{ $tenant->name }}" class="rounded-md border-slate-200 bg-slate-50 text-xs">
-                                            <select name="plan_tier" class="rounded-md border-slate-200 bg-slate-50 text-xs">
-                                                @foreach (['starter', 'professional', 'business', 'enterprise'] as $tier)
-                                                    <option value="{{ $tier }}" @selected($tenant->plan_tier === $tier)>{{ ucfirst($tier) }}</option>
-                                                @endforeach
-                                            </select>
-                                            <select name="status" class="rounded-md border-slate-200 bg-slate-50 text-xs">
-                                                @foreach (['pending', 'active', 'inactive', 'suspended'] as $status)
-                                                    <option value="{{ $status }}" @selected(($tenant->status ?? 'pending') === $status)>{{ ucfirst($status) }}</option>
-                                                @endforeach
-                                            </select>
-                                            <input type="text" name="primary_domain" value="{{ $tenant->primary_domain }}" placeholder="domain" class="rounded-md border-slate-200 bg-slate-50 text-xs">
-                                            <input type="text" name="database_name" value="{{ $tenant->database_name }}" placeholder="db" class="rounded-md border-slate-200 bg-slate-50 text-xs">
-                                            <button type="submit" class="mt-2 w-full rounded-full border border-blue-500 text-blue-500 hover:bg-blue-50 px-4 py-1.5 text-xs font-semibold transition-colors">Save</button>
-                                        </form>
+                                    <td class="px-4 py-3 text-slate-600" x-data="{ open: false }">
+                                        <button @click="open = true" type="button" class="whitespace-nowrap px-4 py-1.5 rounded-full bg-[#E2D4FF] text-black text-xs font-bold shadow-sm transition-transform hover:scale-105">
+                                            Manage
+                                        </button>
+
+                                        <!-- Edit Modal -->
+                                        <div x-show="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" x-cloak style="display: none;" @keydown.escape.window="open = false">
+                                            <div @click.away="open = false" class="bg-white p-8 rounded-[28px] shadow-2xl flex flex-col w-full max-w-md text-left transform transition-all relative animate-fade-in">
+                                                <button @click="open = false" type="button" class="absolute top-6 right-6 text-gray-400 hover:text-black transition-colors rounded-full p-1 hover:bg-gray-100">
+                                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                                </button>
+
+                                                <div class="mb-6">
+                                                    <h3 class="text-2xl font-bold text-gray-900 tracking-tight">Edit Tenant</h3>
+                                                    <p class="text-sm font-medium text-gray-400 mt-1">Update details for {{ $tenant->name }}</p>
+                                                </div>
+
+                                                <form id="tenant-update-form-{{ $tenant->id }}" method="POST" action="{{ route('admin.tenants.update', ['tenant' => $tenant->id]) }}" class="space-y-5">
+                                                    @csrf
+                                                    @method('PATCH')
+
+                                                    <div>
+                                                        <label class="block text-sm font-bold text-gray-700 mb-1.5">Tenant Name</label>
+                                                        <input type="text" name="name" value="{{ $tenant->name }}" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm" required>
+                                                    </div>
+
+                                                    <div class="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label class="block text-sm font-bold text-gray-700 mb-1.5">Plan Tier</label>
+                                                            <select name="plan_tier" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm" required>
+                                                                @foreach (['starter', 'professional', 'business', 'enterprise'] as $tier)
+                                                                    <option value="{{ $tier }}" @selected($tenant->plan_tier === $tier)>{{ ucfirst($tier) }}</option>
+                                                                @endforeach
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-sm font-bold text-gray-700 mb-1.5">Status</label>
+                                                            <select name="status" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm" required>
+                                                                @foreach (['pending', 'active', 'inactive', 'suspended'] as $status)
+                                                                    <option value="{{ $status }}" @selected(($tenant->status ?? 'pending') === $status)>{{ ucfirst($status) }}</option>
+                                                                @endforeach
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="block text-sm font-bold text-gray-700 mb-1.5">Primary Domain</label>
+                                                        <input type="text" name="primary_domain" value="{{ $tenant->primary_domain }}" placeholder="e.g. myshop.localhost:8000" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm">
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="block text-sm font-bold text-gray-700 mb-1.5">Database Name</label>
+                                                        <input type="text" name="database_name" value="{{ $tenant->database_name }}" placeholder="tenant_db_1" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm">
+                                                    </div>
+
+                                                </form>
+
+                                                <div class="pt-4 flex justify-end gap-3">
+                                                    <a href="{{ route('admin.customer.dashboard', ['tenant' => $tenant->id]) }}" class="px-5 py-2.5 rounded-full bg-blue-100 border border-blue-200 text-blue-800 font-bold hover:bg-blue-200 transition-colors shadow-sm" target="_blank" rel="noopener">
+                                                        Open Customer View
+                                                    </a>
+                                                    <form method="POST" action="{{ route('admin.tenants.resend-credentials', ['tenant' => $tenant->id]) }}" onsubmit="return confirm('Regenerate and email temporary credentials to this tenant owner?');">
+                                                        @csrf
+                                                        <button type="submit" class="px-5 py-2.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 font-bold hover:bg-amber-200 transition-colors shadow-sm">Resend Credentials</button>
+                                                    </form>
+                                                    <button type="button" @click="open = false" class="px-5 py-2.5 rounded-full bg-white border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors shadow-sm">Cancel</button>
+                                                    <button type="submit" form="tenant-update-form-{{ $tenant->id }}" class="px-5 py-2.5 rounded-full bg-black text-white font-bold hover:bg-gray-800 transition-colors shadow-sm tracking-wide">Save Changes</button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             @empty

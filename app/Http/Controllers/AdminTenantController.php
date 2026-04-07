@@ -52,6 +52,7 @@ class AdminTenantController extends Controller
                 'name' => $validated['owner_name'],
                 'email' => $validated['owner_email'],
                 'password' => Hash::make($generatedPassword),
+                'email_verified_at' => now(),
             ]);
 
             Role::findOrCreate('Barbershop Admin', 'web');
@@ -65,11 +66,9 @@ class AdminTenantController extends Controller
         $assignedDomain = $this->provisioning->ensureDomain($tenant);
         $result = $this->provisioning->provisionDatabase($tenant);
 
-        $systemUrl = str_starts_with($assignedDomain, 'http://') || str_starts_with($assignedDomain, 'https://')
-            ? $assignedDomain
-            : 'http://'.$assignedDomain;
-
-        $loginUrl = url('/login');
+        $systemUrl = $this->provisioning->tenantUrl($assignedDomain);
+        $loginUrl = $this->provisioning->tenantUrl($assignedDomain, '/login');
+        $managerUrl = $this->provisioning->tenantUrl($assignedDomain, '/manager');
 
         $this->notifier->notifyUserWithDetails(
             $owner,
@@ -81,6 +80,7 @@ class AdminTenantController extends Controller
                 'Login URL' => $loginUrl,
                 'Assigned Domain' => $assignedDomain,
                 'System URL' => $systemUrl,
+                'Manager Dashboard URL' => $managerUrl,
                 'Database Name' => (string) $result['database_name'],
                 'Plan Tier' => ucfirst((string) $tenant->plan_tier),
             ],
@@ -168,6 +168,10 @@ class AdminTenantController extends Controller
 
             if ($provisioningResult !== null) {
                 $tenant->refresh();
+                $assignedDomain = $this->provisioning->ensureDomain($tenant);
+                $loginUrl = $this->provisioning->tenantUrl($assignedDomain, '/login');
+                $managerUrl = $this->provisioning->tenantUrl($assignedDomain, '/manager');
+                $systemUrl = $this->provisioning->tenantUrl($assignedDomain);
 
                 $subject = $provisioningResult['ok']
                     ? 'Tenant Activated and Provisioned'
@@ -186,7 +190,9 @@ class AdminTenantController extends Controller
                         'Current Status' => ucfirst((string) $tenant->status),
                         'Plan Tier' => ucfirst((string) $tenant->plan_tier),
                         'Assigned Domain' => $assignedDomain,
-                        'Login URL' => (string) route('login'),
+                        'System URL' => $systemUrl,
+                        'Login URL' => $loginUrl,
+                        'Manager Dashboard URL' => $managerUrl,
                         'Database Name' => (string) ($provisioningResult['database_name'] ?? $tenant->database_name ?? 'n/a'),
                         'Provisioning Result' => (string) $provisioningResult['message'],
                     ],
@@ -254,6 +260,45 @@ class AdminTenantController extends Controller
         );
     }
 
+    public function resendCredentials(Tenant $tenant): RedirectResponse
+    {
+        $owner = $this->resolveOwnerForCredentials($tenant);
+
+        if (! $owner || trim((string) $owner->email) === '') {
+            return redirect()->route('admin.dashboard')->with('billing_error', 'No tenant owner with an email was found.');
+        }
+
+        $temporaryPassword = Str::password(16);
+
+        $owner->forceFill([
+            'password' => Hash::make($temporaryPassword),
+            'email_verified_at' => $owner->email_verified_at ?? now(),
+        ])->save();
+
+        $assignedDomain = $this->provisioning->ensureDomain($tenant);
+        $systemUrl = $this->provisioning->tenantUrl($assignedDomain);
+        $loginUrl = $this->provisioning->tenantUrl($assignedDomain, '/login');
+        $managerUrl = $this->provisioning->tenantUrl($assignedDomain, '/manager');
+
+        $this->notifier->notifyUserWithDetails(
+            $owner,
+            'Manager Credentials Reset',
+            "Hi {$owner->name}, your manager credentials for {$tenant->name} were reset by platform admin.",
+            [
+                'Login Email' => (string) $owner->email,
+                'Temporary Password' => $temporaryPassword,
+                'Assigned Domain' => $assignedDomain,
+                'System URL' => $systemUrl,
+                'Login URL' => $loginUrl,
+                'Manager Dashboard URL' => $managerUrl,
+                'Plan Tier' => ucfirst((string) $tenant->plan_tier),
+            ],
+            'Please sign in and change your password immediately.'
+        );
+
+        return redirect()->route('admin.dashboard')->with('billing_status', 'Tenant credentials were regenerated and emailed successfully.');
+    }
+
     private function normalizeDomain(string $domain): string
     {
         $domain = strtolower(trim($domain));
@@ -267,6 +312,12 @@ class AdminTenantController extends Controller
             $domain = $parsedHost !== '' ? $parsedHost : $domain;
         }
 
+        // Allow admins to input only a subdomain label (e.g. "myshop").
+        // We normalize it into a full tenant domain using the platform base host.
+        if ($domain !== '' && ! str_contains($domain, '.')) {
+            $domain = $domain.'.'.$this->platformHost();
+        }
+
         return trim($domain, " \t\n\r\0\x0B/");
     }
 
@@ -277,5 +328,69 @@ class AdminTenantController extends Controller
             ->replaceMatches('/[^a-z0-9_]+/', '_')
             ->trim('_')
             ->value();
+    }
+
+    private function platformHost(): string
+    {
+        $host = strtolower((string) parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST));
+
+        if ($host === '' || in_array($host, ['127.0.0.1', '::1'], true)) {
+            return 'localhost';
+        }
+
+        return $host;
+    }
+
+    private function resolveOwnerForCredentials(Tenant $tenant): ?User
+    {
+        $ownerFromMapping = null;
+
+        if (! empty($tenant->owner_user_id)) {
+            $owner = User::withoutGlobalScopes()->find($tenant->owner_user_id);
+            $ownerFromMapping = $owner;
+
+            if (
+                $owner
+                && trim((string) $owner->email) !== ''
+                && ((string) ($owner->tenant_id ?? '') === (string) $tenant->id || empty($owner->tenant_id))
+            ) {
+                if (empty($owner->tenant_id)) {
+                    $owner->forceFill(['tenant_id' => $tenant->id])->save();
+                }
+
+                return $owner;
+            }
+        }
+
+        $roleBasedOwner = User::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->role('Barbershop Admin')
+            ->orderBy('id')
+            ->first();
+
+        if ($roleBasedOwner) {
+            if (! empty($tenant->owner_user_id) && (int) $tenant->owner_user_id !== (int) $roleBasedOwner->id) {
+                $tenant->forceFill(['owner_user_id' => $roleBasedOwner->id])->save();
+            }
+
+            return $roleBasedOwner;
+        }
+
+        // Last-resort recovery for corrupted owner mapping records.
+        if ($ownerFromMapping && trim((string) $ownerFromMapping->email) !== '') {
+            $ownerFromMapping->forceFill(['tenant_id' => $tenant->id])->save();
+            $tenant->forceFill(['owner_user_id' => $ownerFromMapping->id])->save();
+
+            return $ownerFromMapping;
+        }
+
+        return User::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->orderBy('id')
+            ->first();
     }
 }

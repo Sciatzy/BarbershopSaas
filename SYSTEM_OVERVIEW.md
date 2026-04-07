@@ -62,7 +62,21 @@ This project supports:
 - resources/views/billing: plan and billing UI
 - routes/web.php: core web routes and middleware mapping
 
-## 6. Local Redirect Links (for Localhost Testing)
+## 6. Local Testing & Redirect Links
+
+### Starting the Application Locally
+To run the project locally, you need to start both the Laravel backend and the Vite frontend:
+
+1. **Start the backend server**: Open a terminal in the project root and run:
+   ```bash
+   php artisan serve
+   ```
+2. **Start the frontend HMR process**: Open a separate terminal and run:
+   ```bash
+   npm run dev
+   ```
+
+### Local Redirect Links
 Base URL:
 - http://127.0.0.1:8000
 
@@ -169,3 +183,14 @@ git push origin main
 
 ## 10. Suggested Repo Description (Optional)
 Multi-tenant Barbershop SaaS built with Laravel, including tenant lifecycle management, role-based access, subscription billing via PayMongo, and admin/manager operational dashboards.
+
+
+You can log in to http://127.0.0.1:8000/login using any of the following accounts (Password for all is password):
+
+Role	Email
+Platform Admin	platformadmin@example.com
+Barbershop Admin	barbershopadmin@example.com
+Branch Manager	branchmanager@example.com
+Barber	barber@example.com
+Customer	customer@example.com
+🗺️ System Navigation Routes

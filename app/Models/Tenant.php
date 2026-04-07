@@ -18,6 +18,8 @@ class Tenant extends Model
 
     protected $fillable = [
         'name',
+        'brand_color',
+        'brand_color_secondary',
         'plan_tier',
         'status',
         'primary_domain',

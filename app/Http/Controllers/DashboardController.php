@@ -29,7 +29,12 @@ class DashboardController extends Controller
         }
 
         if ($user->hasRole('Customer')) {
-            return redirect()->route('booking.index');
+            return redirect()->route('customer.dashboard');
+        }
+
+        // Fallback for tenant-scoped users whose role data is temporarily missing/misaligned.
+        if (! empty($user->tenant_id)) {
+            return redirect()->route('manager.dashboard');
         }
 
         return view('dashboard', [

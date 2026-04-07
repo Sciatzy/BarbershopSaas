@@ -1,7 +1,19 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
-        <p class="text-sm text-slate-500 mt-1">Tenant subscription and operations overview.</p>
+        <div class="flex justify-between items-center w-full">
+            <div>
+                <h2 class="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
+                <p class="text-sm text-slate-500 mt-1">Tenant subscription and operations overview.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('manager.services.index') }}" class="inline-flex items-center px-4 py-2 bg-amber-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                    Manage Services & Pricing
+                </a>
+                <a href="{{ route('customer.dashboard') }}" target="_blank" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                    View Customer Dashboard &rarr;
+                </a>
+            </div>
+        </div>
     </x-slot>
 
     <div class="py-8">
@@ -16,7 +28,7 @@
                     <div class="animate-spin rounded-full h-12 w-12 border-4 border-amber-500 border-t-transparent mb-4"></div>
                     <p class="text-slate-800 font-semibold text-lg">Redirecting to Checkout...</p>
                     <p class="text-slate-500 text-sm mt-2">Please wait while we prepare your {{ ucfirst($autoPlan) }} plan payment.</p>
-                    <form method="POST" action="{{ route($autoPlanRoute, ['tenant' => $tenant->id]) }}" id="autoCheckoutForm" class="hidden">
+                    <form method="POST" action="{{ route($autoPlanRoute, ['tenant' => $tenant->id], false) }}" id="autoCheckoutForm" class="hidden">
                         @csrf
                     </form>
                     <script>
@@ -66,42 +78,131 @@
                 $planAvailedAt = $subscription?->created_at;
                 $planEndsAt = $subscription?->ends_at;
                 $subscriptionStatus = $subscription?->stripe_status;
+                $shopDomain = $tenant?->primary_domain;
+                $resolvedDomainSuffix = $domainSuffix ?? 'localhost:8000';
+                $resolvedPreferredDomain = $preferredDomain ?? '';
+                $shopDomainUrl = $shopDomain
+                    ? ($domainPreviewUrl ?? ((str_starts_with($shopDomain, 'http://') || str_starts_with($shopDomain, 'https://')) ? $shopDomain : 'http://'.$shopDomain))
+                    : null;
             @endphp
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div class="p-6 border-b border-gray-100">
-                    <h3 class="text-lg font-semibold text-slate-800">Subscription Overview</h3>
-                    <p class="text-sm text-slate-400 mt-1">This panel shows the current plan for your tenant and when it was availed.</p>
+                <div class="p-6 border-b border-gray-100 flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-900">Subscription & Details</h3>
+                        <p class="text-sm text-slate-500 mt-1">Manage your shop, domain, and billing status.</p>
+                    </div>
+                    @if ($shopDomainUrl)
+                        <a href="{{ $shopDomainUrl }}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors border border-indigo-100">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            Visit Domain
+                        </a>
+                    @endif
                 </div>
 
-                <div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                    <div class="rounded-lg border border-gray-200 p-4">
-                        <p class="text-slate-400">Current Plan</p>
-                        <p class="text-slate-800 font-semibold mt-1 capitalize">{{ $tenant?->plan_tier ?? 'N/A' }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-4">
-                        <p class="text-slate-400">Tenant Access</p>
-                        <p class="text-slate-800 font-semibold mt-1 capitalize">{{ $tenant?->status ?? 'pending' }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-4">
-                        <p class="text-slate-400">Subscription</p>
-                        <p class="text-slate-800 font-semibold mt-1 capitalize">{{ $subscriptionStatus ?? 'Not subscribed' }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-4">
-                        <p class="text-slate-400">Plan Availed</p>
-                        <p class="text-slate-800 font-semibold mt-1">{{ $planAvailedAt ? $planAvailedAt->format('Y-m-d') : '-' }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-4">
-                        <p class="text-slate-400">Plan Ends</p>
-                        <p class="text-slate-800 font-semibold mt-1">
-                            @if ($planEndsAt)
-                                {{ $planEndsAt->format('Y-m-d') }}
-                            @elseif ($subscriptionStatus)
-                                Auto-renew
-                            @else
-                                -
-                            @endif
-                        </p>
+                <div class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- Profile/Account -->
+                        <div class="space-y-3">
+                            <h4 class="text-xs uppercase tracking-wider text-slate-400 font-bold mb-2">Shop Profile</h4>
+                            <div>
+                                <p class="text-xs text-slate-500">Shop Name</p>
+                                <p class="text-sm font-medium text-slate-900">{{ $tenant?->name ?? 'N/A' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500">Owner</p>
+                                <p class="text-sm font-medium text-slate-900">{{ $tenant?->owner?->name ?? auth()->user()->name }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500">Email</p>
+                                <p class="text-sm font-medium text-slate-900 truncate" title="{{ $tenant?->owner?->email ?? auth()->user()->email }}">{{ $tenant?->owner?->email ?? auth()->user()->email }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Domain Settings -->
+                        <div class="space-y-3">
+                            <h4 class="text-xs uppercase tracking-wider text-slate-400 font-bold mb-2">Custom Domain</h4>
+                            <div>
+                                <p class="text-xs text-slate-500">Current Domain</p>
+                                @if ($shopDomain)
+                                    <p class="text-sm font-medium text-indigo-600 truncate">{{ $shopDomain }}</p>
+                                @else
+                                    <p class="text-sm font-medium text-slate-400">Not configured</p>
+                                @endif
+                            </div>
+                            @php
+                                $initialPreferredDomain = old('preferred_domain', $resolvedPreferredDomain);
+                                $initialDomainPreview = 'http://'.($initialPreferredDomain !== '' ? $initialPreferredDomain : 'myshop').'.'.$resolvedDomainSuffix;
+                            @endphp
+                            <form method="POST" action="{{ route('manager.domain.update') }}" class="space-y-2">
+                                @csrf
+                                @method('PATCH')
+                                <label for="preferred_domain" class="block text-xs text-slate-500">Preferred Domain Name</label>
+                                <div class="flex items-stretch rounded-md border border-slate-200 overflow-hidden">
+                                    <input
+                                        id="preferred_domain"
+                                        name="preferred_domain"
+                                        type="text"
+                                        value="{{ $initialPreferredDomain }}"
+                                        placeholder="myshop"
+                                        class="w-full border-0 text-sm text-slate-800 focus:ring-0"
+                                        oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'');const preview='http://' + (this.value || 'myshop') + '.{{ $resolvedDomainSuffix }}';document.getElementById('domain-preview-value').textContent=preview;document.getElementById('domain-preview-link').setAttribute('href', preview);"
+                                        required
+                                    >
+                                    <span class="px-3 py-2 bg-slate-50 text-xs text-slate-500 border-l border-slate-200">.{{ $resolvedDomainSuffix }}</span>
+                                </div>
+                                <p class="text-xs text-slate-500">
+                                    Full URL preview:
+                                    <a id="domain-preview-link" href="{{ $initialDomainPreview }}" target="_blank" rel="noopener" class="font-medium text-indigo-600 hover:text-indigo-700 hover:underline">
+                                        <span id="domain-preview-value">{{ $initialDomainPreview }}</span>
+                                    </a>
+                                </p>
+                                <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors">
+                                    Save Domain
+                                </button>
+                            </form>
+                            <div>
+                                <p class="text-xs text-slate-500">Tenant Access</p>
+                                <div class="mt-1 flex items-center">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium {{ $tenant?->status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700' }}">
+                                        <span class="h-1.5 w-1.5 rounded-full {{ $tenant?->status === 'active' ? 'bg-emerald-500' : 'bg-amber-500' }}"></span>
+                                        {{ ucfirst($tenant?->status ?? 'Pending') }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500">Member Since</p>
+                                <p class="text-sm font-medium text-slate-900">{{ optional($tenant?->created_at)->format('M d, Y') ?? '-' }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Billing Status -->
+                        <div class="space-y-3">
+                            <h4 class="text-xs uppercase tracking-wider text-slate-400 font-bold mb-2">Billing Information</h4>
+                            <div>
+                                <p class="text-xs text-slate-500">Current Plan</p>
+                                <p class="text-sm font-medium text-slate-900 capitalize">{{ $tenant?->plan_tier ?? 'N/A' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500">Status</p>
+                                <p class="text-sm font-medium capitalize {{ ($subscriptionStatus === 'active') ? 'text-emerald-600' : (($subscriptionStatus === 'canceled') ? 'text-red-500' : 'text-amber-600') }}">
+                                    {{ $subscriptionStatus ?? 'Not subscribed' }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500">Plan Duration</p>
+                                <p class="text-sm font-medium text-slate-900">
+                                    {{ $planAvailedAt ? $planAvailedAt->format('M d, Y') : '-' }} &rarr;
+                                    @if ($planEndsAt)
+                                        {{ $planEndsAt->format('M d, Y') }}
+                                    @elseif ($subscriptionStatus)
+                                        Auto-renew
+                                    @else
+                                        -
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -225,6 +326,41 @@
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div class="p-6 border-b border-gray-100">
+                    <h3 class="text-lg font-semibold text-slate-800">Customer Availed Services</h3>
+                    <p class="text-sm text-slate-400 mt-1">Recent services booked by customers are listed here.</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y-0 border-b border-slate-100 text-sm">
+                        <thead class="bg-slate-50 text-slate-500 rounded-t-xl">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Booked At</th>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Customer</th>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Service Availed</th>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Price</th>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50 bg-white">
+                            @forelse ($availedServices as $availed)
+                                <tr>
+                                    <td class="px-4 py-3 text-slate-800">{{ $availed->booked_at ? \Illuminate\Support\Carbon::parse($availed->booked_at)->format('Y-m-d g:i A') : '-' }}</td>
+                                    <td class="px-4 py-3 text-slate-600">{{ $availed->customer_name ?? 'N/A' }}</td>
+                                    <td class="px-4 py-3 text-slate-600">{{ $availed->service_name ?? 'N/A' }}</td>
+                                    <td class="px-4 py-3 text-slate-600">PHP {{ number_format((float) ($availed->total_price ?? 0), 2) }}</td>
+                                    <td class="px-4 py-3 text-slate-600 capitalize">{{ $availed->status ?? 'queued' }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="px-4 py-6 text-center text-slate-400">No customer bookings yet.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="p-6 border-b border-gray-100">
                     <h3 class="text-lg font-semibold text-slate-800">Branch Appointments</h3>
                 </div>
                 <div class="overflow-x-auto">
@@ -322,4 +458,4 @@
             </div>
         </div>
     </div>
-</x-app-layout>
+</x-app-layout>%

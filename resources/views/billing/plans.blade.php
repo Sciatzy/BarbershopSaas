@@ -62,12 +62,12 @@
                                 <p class="text-xs text-slate-500 mt-3">{{ $plan['description'] }}</p>
                                 <p class="text-xs text-slate-400 mt-2">{{ $plan['limits'] }}</p>
 
-                                <form method="POST" action="{{ route($plan['checkout_route'], ['tenant' => $tenant->id]) }}" class="mt-6 mt-auto">
+                                <form method="POST" action="{{ route($plan['checkout_route'], ['tenant' => $tenant->id], false) }}" class="mt-auto">
                                     @csrf
                                     <button
                                         type="submit"
-                                        class="w-full rounded-md px-3 py-2 text-sm font-semibold text-white transition"
-                                        
+                                        class="w-full rounded-md bg-amber-600 hover:bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition"
+
                                         title="Proceed to PayMongo checkout"
                                     >
                                         Pay with PayMongo - {{ $plan['label'] }}
