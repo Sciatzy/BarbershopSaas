@@ -21,7 +21,7 @@ class AdminDashboardController extends Controller
     public function index(): View
     {
         $tenants = Tenant::query()
-            ->with('latestCashierSubscription')
+            ->with(['latestCashierSubscription', 'owner:id,email,name'])
             ->orderBy('name')
             ->get([
                 'id',

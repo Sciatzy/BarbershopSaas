@@ -348,27 +348,6 @@
                 sidebar.classList.toggle('open');
             });
 
-            // Queue polling
-            function updateQueueStatus() {
-                fetch('/api/public/queue/status', {
-                    headers: { 'X-Tenant-ID': '{{ auth()->user()->tenant_id ?? '' }}' }
-                })
-                .then(r => r.json())
-                .then(data => {
-                    const countEl = document.getElementById('sidebar-queue-count');
-                    const waitEl  = document.getElementById('sidebar-wait');
-                    if (countEl) countEl.textContent = data.in_queue ?? '—';
-                    if (waitEl)  waitEl.textContent  = data.estimated_wait_min ?? '?';
-                })
-                .catch(() => {}); // fail silently
-            }
-
-            updateQueueStatus();
-            setInterval(updateQueueStatus, 30000);
-            document.addEventListener('visibilitychange', () => {
-                if (!document.hidden) updateQueueStatus();
-            });
-
             // Number counter animation
             function animateCount(el, target, isDecimal = false, prefix = '', suffix = '') {
                 const dur = 1200, start = performance.now();

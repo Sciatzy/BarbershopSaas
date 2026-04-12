@@ -206,6 +206,12 @@ git push origin main
 git push origin v1.0.0
 ```
 
+## 12. Completed Tenant Modules Audit
+
+For instructor validation and task tracking, see:
+
+- TENANT_MODULES_COMPLETION.md
+
 
 You can log in to http://127.0.0.1:8000/login using any of the following accounts (Password for all is password):
 

@@ -130,7 +130,7 @@
                                 @endphp
                                 <tr>
                                     <td class="px-4 py-3 text-slate-800 font-medium">{{ $tenant->name }}</td>
-     <td class="px-4 py-3 text-slate-600">{{ $tenant->owner->email ?? '-' }}</td>
+                                    <td class="px-4 py-3 text-slate-600">{{ optional($tenant->owner)->email ?? '-' }}</td>
                                     <td class="px-4 py-3 text-slate-600 capitalize">{{ $tenant->status ?? 'pending' }}</td>
                                     <td class="px-4 py-3 text-slate-600 capitalize">{{ $tenant->plan_tier }}</td>
                                     <td class="px-4 py-3 text-slate-600">
