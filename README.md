@@ -64,6 +64,12 @@ Enable successful payment events, including:
 
 After a successful payment, webhook processing updates the tenant plan tier and activates the local plan record.
 
+## Versioning and Updates
+
+- Versioning policy: see VERSIONING.md
+- Project change history: see CHANGELOG.md
+- This repository follows Semantic Versioning (MAJOR.MINOR.PATCH)
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

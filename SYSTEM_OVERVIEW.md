@@ -184,6 +184,28 @@ git push origin main
 ## 10. Suggested Repo Description (Optional)
 Multi-tenant Barbershop SaaS built with Laravel, including tenant lifecycle management, role-based access, subscription billing via PayMongo, and admin/manager operational dashboards.
 
+## 11. GitHub Support and Versioning
+
+This project now uses a formal versioning workflow for support and updates:
+
+- Semantic Versioning (MAJOR.MINOR.PATCH)
+- CHANGELOG.md for release history
+- VERSIONING.md for release/bump rules and tag workflow
+
+Recommended release baseline for defense/demo:
+
+- v1.0.0 as current stable baseline
+
+Suggested Git commands for tagging:
+
+```bash
+git checkout main
+git pull
+git tag -a v1.0.0 -m "Release v1.0.0: Multi-tenant SaaS baseline"
+git push origin main
+git push origin v1.0.0
+```
+
 
 You can log in to http://127.0.0.1:8000/login using any of the following accounts (Password for all is password):
 
