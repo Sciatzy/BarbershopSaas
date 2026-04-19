@@ -15,14 +15,14 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="font-sans text-gray-900 bg-[#FAFAFC] h-screen overflow-hidden selection:bg-[#E2D4FF] selection:text-black">
-        <div class="flex h-screen w-full">
+    <body class="font-sans text-gray-900 bg-[#FAFAFC] min-h-screen overflow-x-hidden selection:bg-[#E2D4FF] selection:text-black">
+        <div class="flex min-h-screen w-full">
 
             <!-- Sidebar -->
             @include('layouts.navigation')
 
             <!-- Main Content Area -->
-            <div class="flex-1 flex flex-col h-screen overflow-hidden relative">
+            <div class="flex-1 flex flex-col min-h-screen overflow-hidden relative">
 
                 <!-- Main Header (Search, Notifications, Profile) -->
                 <header class="flex justify-between items-center px-10 py-6 shrink-0 z-20 fade-in-up stagger-1">
@@ -75,7 +75,7 @@
                 </header>
 
                 <!-- Scrollable Dashboard Content -->
-                <main class="flex-1 overflow-x-hidden overflow-y-auto px-10 pb-12 fade-in-up stagger-2">
+                <main class="flex-1 min-h-0 overflow-x-hidden overflow-y-auto px-10 pb-12 fade-in-up stagger-2">
                     {{ $slot }}
                 </main>
             </div>

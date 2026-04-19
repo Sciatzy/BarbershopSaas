@@ -13,6 +13,17 @@
                 </div>
             @endif
 
+            @if ($errors->any())
+                <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+                    <p class="font-semibold">Please fix the following:</p>
+                    <ul class="list-disc ml-5 mt-1">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <div class="bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-4">
                 <p class="text-sm text-indigo-700">You have {{ (int) (auth()->user()->points_balance ?? 0) }} pts</p>
                 <p class="text-xs text-indigo-600 mt-1">Earn 1 point per ₱50 spent</p>
@@ -50,6 +61,7 @@
                                     <p class="text-sm font-semibold text-gray-900">Booking #{{ $booking->id }}</p>
                                     <p class="text-sm text-gray-600 mt-1">{{ $booking->service?->name ?? 'Service unavailable' }}</p>
                                     <p class="text-xs text-gray-500 mt-1">Barber: {{ $booking->staff?->name ?? 'Any' }}</p>
+                                    <p class="text-xs text-gray-500 mt-1">Schedule: {{ optional($booking->appointment_datetime)->format('M d, Y h:i A') ?? '-' }}</p>
                                 </div>
 
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold {{ $statusClass }}">
@@ -62,6 +74,62 @@
                                 <p>Total Price: ₱{{ number_format((float) ($booking->total_price ?? 0), 2) }}</p>
                                 <p>Points Earned: {{ $booking->status === 'completed' ? $earnedPoints : 0 }}</p>
                             </div>
+
+                            @if (in_array($status, ['queued', 'confirmed'], true))
+                                <div class="mt-4 border-t border-gray-100 pt-4 space-y-3">
+                                    <div class="flex flex-wrap gap-2">
+                                        <form method="POST" action="{{ route('booking.cancel', $booking) }}" onsubmit="return confirm('Cancel this booking?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-md border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50">
+                                                Cancel Booking
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    <form method="POST" action="{{ route('booking.reschedule', $booking) }}" class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                                        @csrf
+                                        @method('PATCH')
+                                        <div>
+                                            <label class="block text-xs text-gray-500 mb-1">New Date</label>
+                                            <input type="date" name="appointment_date" required class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-500 mb-1">New Time</label>
+                                            <input type="time" name="appointment_time" required class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                        </div>
+                                        <div>
+                                            <button type="submit" class="inline-flex items-center px-3 py-2 rounded-md bg-gray-900 text-white text-xs font-semibold hover:bg-gray-800">
+                                                Reschedule
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            @endif
+
+                            @if ($status === 'completed')
+                                <form method="POST" action="{{ route('booking.feedback', $booking) }}" class="mt-4 border-t border-gray-100 pt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    @csrf
+                                    <div>
+                                        <label class="block text-xs text-gray-500 mb-1">Rating (1-5)</label>
+                                        <select name="customer_rating" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                            <option value="">No rating</option>
+                                            @for ($rating = 5; $rating >= 1; $rating--)
+                                                <option value="{{ $rating }}" @selected((int) ($booking->customer_rating ?? 0) === $rating)>{{ $rating }} star{{ $rating > 1 ? 's' : '' }}</option>
+                                            @endfor
+                                        </select>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-xs text-gray-500 mb-1">Feedback</label>
+                                        <textarea name="customer_feedback" rows="2" maxlength="500" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="Share your experience...">{{ old('customer_feedback', $booking->customer_feedback) }}</textarea>
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <button type="submit" class="inline-flex items-center px-3 py-2 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500">
+                                            Submit Feedback
+                                        </button>
+                                    </div>
+                                </form>
+                            @endif
                         </div>
                     @endforeach
                 </div>

@@ -31,7 +31,7 @@ class AdminTenantController extends Controller
             'database_name' => ['nullable', 'string', 'max:255', 'unique:tenants,database_name'],
         ]);
 
-        $generatedPassword = Str::password(16);
+        $generatedPassword = $this->generateTemporaryPassword();
         $preferredDomain = $this->normalizeDomain((string) ($validated['primary_domain'] ?? ''));
         $preferredDatabase = $this->normalizeDatabaseName((string) ($validated['database_name'] ?? ''));
         $assignedDomain = $preferredDomain !== '' ? $preferredDomain : null;
@@ -63,6 +63,8 @@ class AdminTenantController extends Controller
             return [$tenant, $owner];
         });
 
+        $this->syncAdminProvisionedSubscription($tenant);
+
         $assignedDomain = $this->provisioning->ensureDomain($tenant);
         $result = $this->provisioning->provisionDatabase($tenant);
 
@@ -72,8 +74,8 @@ class AdminTenantController extends Controller
 
         $this->notifier->notifyUserWithDetails(
             $owner,
-            'Your Manager Account Credentials',
-            "Hi {$owner->name}, your manager account for {$tenant->name} has been created and activated.",
+            'Your Barbershop Admin Account Has Been Created',
+            "Hi {$owner->name}, your barbershop admin account for {$tenant->name} has been created and activated.",
             [
                 'Login Email' => $owner->email,
                 'Temporary Password' => $generatedPassword,
@@ -118,6 +120,10 @@ class AdminTenantController extends Controller
             'activated_at' => $validated['status'] === 'active' ? ($tenant->activated_at ?? now()) : $tenant->activated_at,
             'deactivated_at' => in_array($validated['status'], ['inactive', 'suspended'], true) ? now() : null,
         ])->save();
+
+        if ($tenant->status === 'active') {
+            $this->syncAdminProvisionedSubscription($tenant);
+        }
 
         if (in_array($previousStatus, ['inactive', 'suspended'], true) && $tenant->status === 'active') {
             $reactivated = $tenant->subscriptions()
@@ -268,32 +274,45 @@ class AdminTenantController extends Controller
             return redirect()->route('admin.dashboard')->with('billing_error', 'No tenant owner with an email was found.');
         }
 
-        $temporaryPassword = Str::password(16);
+        $temporaryPassword = $this->generateTemporaryPassword();
 
+        // Use plain value so User::password hashed cast handles hashing consistently.
         $owner->forceFill([
-            'password' => Hash::make($temporaryPassword),
+            'password' => $temporaryPassword,
             'email_verified_at' => $owner->email_verified_at ?? now(),
         ])->save();
+
+        // Defensive fallback: ensure stored hash can be validated against emailed password.
+        $freshOwner = User::withoutGlobalScopes()->find($owner->id);
+
+        if (! $freshOwner || ! Hash::check($temporaryPassword, (string) $freshOwner->password)) {
+            $owner->forceFill([
+                'password' => Hash::make($temporaryPassword),
+                'email_verified_at' => $owner->email_verified_at ?? now(),
+            ])->save();
+        }
 
         $assignedDomain = $this->provisioning->ensureDomain($tenant);
         $systemUrl = $this->provisioning->tenantUrl($assignedDomain);
         $loginUrl = $this->provisioning->tenantUrl($assignedDomain, '/login');
         $managerUrl = $this->provisioning->tenantUrl($assignedDomain, '/manager');
+        $passwordResetRequestUrl = $this->provisioning->tenantUrl($assignedDomain, '/forgot-password');
 
         $this->notifier->notifyUserWithDetails(
             $owner,
-            'Manager Credentials Reset',
-            "Hi {$owner->name}, your manager credentials for {$tenant->name} were reset by platform admin.",
+            'Barbershop Admin Credentials Reset',
+            "Hi {$owner->name}, your barbershop admin credentials for {$tenant->name} were reset by the platform administrator.",
             [
                 'Login Email' => (string) $owner->email,
                 'Temporary Password' => $temporaryPassword,
                 'Assigned Domain' => $assignedDomain,
                 'System URL' => $systemUrl,
                 'Login URL' => $loginUrl,
+                'Forgot Password URL' => $passwordResetRequestUrl,
                 'Manager Dashboard URL' => $managerUrl,
                 'Plan Tier' => ucfirst((string) $tenant->plan_tier),
             ],
-            'Please sign in and change your password immediately.'
+            'If direct sign-in with the temporary password does not work, use Forgot Password to set a new one immediately.'
         );
 
         return redirect()->route('admin.dashboard')->with('billing_status', 'Tenant credentials were regenerated and emailed successfully.');
@@ -392,5 +411,51 @@ class AdminTenantController extends Controller
             ->where('email', '!=', '')
             ->orderBy('id')
             ->first();
+    }
+
+    private function syncAdminProvisionedSubscription(Tenant $tenant): void
+    {
+        if ($tenant->status !== 'active') {
+            return;
+        }
+
+        $manualStripeId = 'admin_manual_'.$tenant->id;
+        $manualStripePrice = 'admin_manual_'.(string) $tenant->plan_tier;
+
+        DB::transaction(function () use ($tenant, $manualStripeId, $manualStripePrice): void {
+            $tenant->subscriptions()
+                ->where('stripe_id', '!=', $manualStripeId)
+                ->whereIn('stripe_status', ['active', 'trialing'])
+                ->update([
+                    'stripe_status' => 'canceled',
+                    'ends_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            $tenant->subscriptions()->updateOrCreate(
+                ['stripe_id' => $manualStripeId],
+                [
+                    'type' => 'default',
+                    'stripe_status' => 'active',
+                    'stripe_price' => $manualStripePrice,
+                    'quantity' => 1,
+                    'trial_ends_at' => null,
+                    'ends_at' => null,
+                ]
+            );
+        });
+    }
+
+    private function generateTemporaryPassword(int $length = 12): string
+    {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+        $maxIndex = strlen($alphabet) - 1;
+        $password = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $password .= $alphabet[random_int(0, $maxIndex)];
+        }
+
+        return $password;
     }
 }

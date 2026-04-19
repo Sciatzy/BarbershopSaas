@@ -17,6 +17,11 @@ class WalkInWorkController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Branch Manager')) {
+            abort(403);
+        }
+
         $tenantId = (string) ($user->tenant_id ?? '');
 
         if ($tenantId === '') {
@@ -33,12 +38,17 @@ class WalkInWorkController extends Controller
             'work_notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        if (empty($user->branch_id) || (int) $validated['branch_id'] !== (int) $user->branch_id) {
+            return back()->with('billing_error', 'You can only record walk-in work for your assigned branch.');
+        }
+
         Branch::query()->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->findOrFail($validated['branch_id']);
 
         User::query()->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
+            ->where('branch_id', $validated['branch_id'])
             ->role('Barber')
             ->findOrFail($validated['barber_id']);
 
@@ -66,7 +76,7 @@ class WalkInWorkController extends Controller
         $appointment->customer_id = $walkInCustomer->id;
         $appointment->barber_id = $validated['barber_id'];
         $appointment->service_id = $validated['service_id'];
-        $appointment->appointment_datetime = Carbon::parse($validated['work_datetime'])->toDateTimeString();
+        $appointment->appointment_datetime = Carbon::parse($validated['work_datetime']);
         $appointment->source = 'walk_in';
         $appointment->status = 'completed';
         $appointment->is_on_time = (bool) ($validated['is_on_time'] ?? false);

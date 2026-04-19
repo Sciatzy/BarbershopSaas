@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Events\AppointmentCompleted;
 use App\Events\AppointmentConfirmedEvent;
 use App\Events\ReviewSubmitted;
+use App\Services\GoogleCalendarSyncService;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,6 +25,7 @@ class Appointment extends Model
         'appointment_datetime',
         'booked_at',
         'completed_at',
+        'google_calendar_event_id',
         'status',
         'total_price',
         'notes',
@@ -31,6 +33,7 @@ class Appointment extends Model
         'created_by',
         'is_on_time',
         'customer_rating',
+        'customer_feedback',
         'work_notes',
     ];
 
@@ -78,6 +81,10 @@ class Appointment extends Model
         static::updated(function (self $appointment): void {
             if ($appointment->wasChanged('status') && $appointment->status === 'confirmed') {
                 AppointmentConfirmedEvent::dispatch($appointment);
+            }
+
+            if ($appointment->wasChanged('status') && $appointment->status === 'cancelled') {
+                app(GoogleCalendarSyncService::class)->syncCancellation($appointment);
             }
 
             if ($appointment->wasChanged('status') && $appointment->status === 'completed') {

@@ -52,32 +52,36 @@
                                         </td>
                                         <td class="px-4 py-3 text-gray-600">{{ optional($booking->booked_at)->format('M d, Y h:i A') ?? optional($booking->created_at)->format('M d, Y h:i A') }}</td>
                                         <td class="px-4 py-3">
-                                            <div class="flex items-center gap-2">
-                                                @if ($booking->status === 'queued')
-                                                    <form method="POST" action="{{ route('manager.queue.status', $booking) }}">
-                                                        @csrf
-                                                        <input type="hidden" name="_method" value="POST">
-                                                        <input type="hidden" name="status" value="in_progress">
-                                                        <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-500">Start</button>
-                                                    </form>
-                                                @endif
+                                            @if (auth()->user()->hasRole('Branch Manager'))
+                                                <div class="flex items-center gap-2">
+                                                    @if ($booking->status === 'queued')
+                                                        <form method="POST" action="{{ route('manager.queue.status', $booking) }}">
+                                                            @csrf
+                                                            <input type="hidden" name="_method" value="POST">
+                                                            <input type="hidden" name="status" value="in_progress">
+                                                            <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-500">Start</button>
+                                                        </form>
+                                                    @endif
 
-                                                @if ($booking->status === 'in_progress')
-                                                    <form method="POST" action="{{ route('manager.queue.status', $booking) }}">
-                                                        @csrf
-                                                        <input type="hidden" name="_method" value="POST">
-                                                        <input type="hidden" name="status" value="completed">
-                                                        <button type="submit" class="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-500">Complete</button>
-                                                    </form>
+                                                    @if ($booking->status === 'in_progress')
+                                                        <form method="POST" action="{{ route('manager.queue.status', $booking) }}">
+                                                            @csrf
+                                                            <input type="hidden" name="_method" value="POST">
+                                                            <input type="hidden" name="status" value="completed">
+                                                            <button type="submit" class="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-500">Complete</button>
+                                                        </form>
 
-                                                    <form method="POST" action="{{ route('manager.queue.status', $booking) }}">
-                                                        @csrf
-                                                        <input type="hidden" name="_method" value="POST">
-                                                        <input type="hidden" name="status" value="cancelled">
-                                                        <button type="submit" class="px-3 py-1.5 bg-rose-600 text-white rounded text-xs hover:bg-rose-500">Cancel</button>
-                                                    </form>
-                                                @endif
-                                            </div>
+                                                        <form method="POST" action="{{ route('manager.queue.status', $booking) }}">
+                                                            @csrf
+                                                            <input type="hidden" name="_method" value="POST">
+                                                            <input type="hidden" name="status" value="cancelled">
+                                                            <button type="submit" class="px-3 py-1.5 bg-rose-600 text-white rounded text-xs hover:bg-rose-500">Cancel</button>
+                                                        </form>
+                                                    @endif
+                                                </div>
+                                            @else
+                                                <span class="text-xs text-slate-500">Read-only</span>
+                                            @endif
                                         </td>
                                     </tr>
                                 @endforeach

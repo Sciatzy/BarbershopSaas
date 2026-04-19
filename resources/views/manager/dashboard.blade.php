@@ -3,12 +3,16 @@
         <div class="flex justify-between items-center w-full">
             <div>
                 <h2 class="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
-                <p class="text-sm text-slate-500 mt-1">Tenant subscription and operations overview.</p>
+                <p class="text-sm text-slate-500 mt-1">
+                    {{ $canManageBilling ? 'Owner scope: monitoring, governance, and billing controls.' : 'Branch scope: day-to-day branch operations and service execution.' }}
+                </p>
             </div>
             <div class="flex items-center gap-2">
-                <a href="{{ route('manager.services.index') }}" class="inline-flex items-center px-4 py-2 bg-amber-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                    Manage Services & Pricing
-                </a>
+                @if ($canOperateBranch ?? false)
+                    <a href="{{ route('manager.services.index') }}" class="inline-flex items-center px-4 py-2 bg-amber-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                        Manage Services & Pricing
+                    </a>
+                @endif
                 @if ($canManageBilling)
                     <a href="{{ route('customer.dashboard') }}" target="_blank" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
                         View Customer Dashboard &rarr;
@@ -136,33 +140,37 @@
                                 $initialPreferredDomain = old('preferred_domain', $resolvedPreferredDomain);
                                 $initialDomainPreview = 'http://'.($initialPreferredDomain !== '' ? $initialPreferredDomain : 'myshop').'.'.$resolvedDomainSuffix;
                             @endphp
-                            <form method="POST" action="{{ route('manager.domain.update') }}" class="space-y-2">
-                                @csrf
-                                @method('PATCH')
-                                <label for="preferred_domain" class="block text-xs text-slate-500">Preferred Domain Name</label>
-                                <div class="flex items-stretch rounded-md border border-slate-200 overflow-hidden">
-                                    <input
-                                        id="preferred_domain"
-                                        name="preferred_domain"
-                                        type="text"
-                                        value="{{ $initialPreferredDomain }}"
-                                        placeholder="myshop"
-                                        class="w-full border-0 text-sm text-slate-800 focus:ring-0"
-                                        oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'');const preview='http://' + (this.value || 'myshop') + '.{{ $resolvedDomainSuffix }}';document.getElementById('domain-preview-value').textContent=preview;document.getElementById('domain-preview-link').setAttribute('href', preview);"
-                                        required
-                                    >
-                                    <span class="px-3 py-2 bg-slate-50 text-xs text-slate-500 border-l border-slate-200">.{{ $resolvedDomainSuffix }}</span>
-                                </div>
-                                <p class="text-xs text-slate-500">
-                                    Full URL preview:
-                                    <a id="domain-preview-link" href="{{ $initialDomainPreview }}" target="_blank" rel="noopener" class="font-medium text-indigo-600 hover:text-indigo-700 hover:underline">
-                                        <span id="domain-preview-value">{{ $initialDomainPreview }}</span>
-                                    </a>
-                                </p>
-                                <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors">
-                                    Save Domain
-                                </button>
-                            </form>
+                            @if ($canManageBilling)
+                                <form method="POST" action="{{ route('manager.domain.update') }}" class="space-y-2">
+                                    @csrf
+                                    @method('PATCH')
+                                    <label for="preferred_domain" class="block text-xs text-slate-500">Preferred Domain Name</label>
+                                    <div class="flex items-stretch rounded-md border border-slate-200 overflow-hidden">
+                                        <input
+                                            id="preferred_domain"
+                                            name="preferred_domain"
+                                            type="text"
+                                            value="{{ $initialPreferredDomain }}"
+                                            placeholder="myshop"
+                                            class="w-full border-0 text-sm text-slate-800 focus:ring-0"
+                                            oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'');const preview='http://' + (this.value || 'myshop') + '.{{ $resolvedDomainSuffix }}';document.getElementById('domain-preview-value').textContent=preview;document.getElementById('domain-preview-link').setAttribute('href', preview);"
+                                            required
+                                        >
+                                        <span class="px-3 py-2 bg-slate-50 text-xs text-slate-500 border-l border-slate-200">.{{ $resolvedDomainSuffix }}</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500">
+                                        Full URL preview:
+                                        <a id="domain-preview-link" href="{{ $initialDomainPreview }}" target="_blank" rel="noopener" class="font-medium text-indigo-600 hover:text-indigo-700 hover:underline">
+                                            <span id="domain-preview-value">{{ $initialDomainPreview }}</span>
+                                        </a>
+                                    </p>
+                                    <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors">
+                                        Save Domain
+                                    </button>
+                                </form>
+                            @else
+                                <p class="text-xs text-slate-500">Domain updates are restricted to the barbershop owner.</p>
+                            @endif
                             <div>
                                 <p class="text-xs text-slate-500">Tenant Access</p>
                                 <div class="mt-1 flex items-center">
@@ -246,7 +254,7 @@
                 @endif
             </div>
 
-            @if ($canRecordWalkIns && $hasActivePlan)
+            @if (($canRecordWalkIns ?? false) && $hasActivePlan)
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-6 border-b border-gray-100">
                         <h3 class="text-lg font-semibold text-slate-800">Record Walk-in Work</h3>

@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class ManagerDashboardController extends Controller
@@ -49,6 +50,7 @@ class ManagerDashboardController extends Controller
         $user = $request->user();
         $tenantId = (string) ($user->tenant_id ?? '');
         $canManageBilling = $user->hasRole('Barbershop Admin');
+        $canOperateBranch = $user->hasRole('Branch Manager');
 
         $tenant = null;
         $preferredDomain = '';
@@ -57,7 +59,7 @@ class ManagerDashboardController extends Controller
         $subscription = null;
         $hasActivePlan = false;
         $mustContactAdminForReactivation = false;
-        $canRecordWalkIns = $user->hasRole('Barbershop Admin');
+        $canRecordWalkIns = $canOperateBranch && ! empty($user->branch_id);
         $planOptions = collect(self::PLAN_OPTIONS)->map(
             fn (array $plan, string $tier): array => [
                 'tier' => $tier,
@@ -112,6 +114,7 @@ class ManagerDashboardController extends Controller
                 'hasActivePlan' => $hasActivePlan,
                 'mustContactAdminForReactivation' => $mustContactAdminForReactivation,
                 'canManageBilling' => $canManageBilling,
+                'canOperateBranch' => $canOperateBranch,
                 'canRecordWalkIns' => $canRecordWalkIns,
                 'planOptions' => $planOptions,
                 'barbersForWalkIns' => collect(),
@@ -153,15 +156,19 @@ class ManagerDashboardController extends Controller
             $availedServicesQuery->where('a.branch_id', $user->branch_id);
         }
 
+        $availedPriceColumn = Schema::hasColumn('appointments', 'total_price')
+            ? DB::raw('COALESCE(a.total_price, s.price, 0) as total_price')
+            : DB::raw('COALESCE(s.price, 0) as total_price');
+
         $availedServices = $availedServicesQuery
-            ->orderByDesc('a.booked_at')
+            ->orderByDesc('a.appointment_datetime')
             ->orderByDesc('a.created_at')
             ->limit(20)
             ->get([
                 'a.id',
-                'a.booked_at',
+                'a.appointment_datetime as booked_at',
                 'a.status',
-                'a.total_price',
+                $availedPriceColumn,
                 'customer.name as customer_name',
                 's.name as service_name',
             ]);
@@ -193,6 +200,10 @@ class ManagerDashboardController extends Controller
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->role('Barber')
+            ->when(
+                $user->hasRole('Branch Manager') && ! empty($user->branch_id),
+                fn ($query) => $query->where('branch_id', $user->branch_id)
+            )
             ->orderBy('name')
             ->get(['id', 'name', 'branch_id']);
 
@@ -215,6 +226,7 @@ class ManagerDashboardController extends Controller
             'hasActivePlan' => $hasActivePlan,
             'mustContactAdminForReactivation' => $mustContactAdminForReactivation,
             'canManageBilling' => $canManageBilling,
+            'canOperateBranch' => $canOperateBranch,
             'canRecordWalkIns' => $canRecordWalkIns,
             'planOptions' => $planOptions,
             'barbersForWalkIns' => $barbersForWalkIns,
@@ -225,6 +237,11 @@ class ManagerDashboardController extends Controller
     public function updateDomain(Request $request): RedirectResponse
     {
         $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Barbershop Admin')) {
+            abort(403);
+        }
+
         $tenantId = (string) ($user->tenant_id ?? '');
 
         if ($tenantId === '') {

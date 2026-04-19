@@ -5,9 +5,11 @@ use App\Http\Controllers\AdminTenantController;
 use App\Http\Controllers\BarberDashboardController;
 use App\Http\Controllers\BarberManagementController;
 use App\Http\Controllers\BillingPlansController;
+use App\Http\Controllers\Manager\BranchController as ManagerBranchController;
 use App\Http\Controllers\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Manager\QueueController;
+use App\Http\Controllers\Manager\ScheduleController as ManagerScheduleController;
 use App\Http\Controllers\Manager\ServiceController as ManagerServiceController;
 use App\Http\Controllers\Public\LandingController;
 use App\Http\Controllers\ProfileController;
@@ -46,27 +48,41 @@ Route::middleware(['auth', 'verified', 'role:Platform Admin'])->group(function (
 
 Route::middleware(['auth', 'verified', 'role:Barbershop Admin|Branch Manager'])->group(function () {
     Route::get('/manager', [ManagerDashboardController::class, 'index'])->name('manager.dashboard');
+    Route::middleware('active_plan')->group(function () {
+        Route::get('/manager/barbers', [BarberManagementController::class, 'index'])->name('manager.barbers.index');
+        Route::post('/manager/barbers', [BarberManagementController::class, 'store'])->name('manager.barbers.store');
+        Route::get('/manager/queue', [QueueController::class, 'index'])->name('manager.queue.index');
+    });
+});
+
+Route::middleware(['auth', 'verified', 'role:Barbershop Admin'])->group(function () {
     Route::patch('/manager/domain', [ManagerDashboardController::class, 'updateDomain'])->name('manager.domain.update');
     Route::get('/manager/setup', [ManagerSetupController::class, 'create'])->name('manager.setup');
     Route::post('/manager/setup', [ManagerSetupController::class, 'store'])->name('manager.setup.store');
     Route::middleware('active_plan')->group(function () {
-        Route::get('/manager/barbers', [BarberManagementController::class, 'index'])->name('manager.barbers.index');
-        Route::post('/manager/barbers', [BarberManagementController::class, 'store'])->name('manager.barbers.store');
-        Route::get('/manager/services', [ManagerServiceController::class, 'index'])->name('manager.services.index');
-        Route::post('/manager/services', [ManagerServiceController::class, 'store'])->name('manager.services.store');
-        Route::patch('/manager/services/{service}', [ManagerServiceController::class, 'update'])->name('manager.services.update');
-        Route::get('/manager/queue', [QueueController::class, 'index'])->name('manager.queue.index');
-        Route::post('/manager/queue/{booking}/status', [QueueController::class, 'updateStatus'])->name('manager.queue.status');
+        Route::get('/manager/branches', [ManagerBranchController::class, 'index'])->name('manager.branches.index');
+        Route::post('/manager/branches', [ManagerBranchController::class, 'store'])->name('manager.branches.store');
+        Route::post('/manager/branches/{branch}/manager', [ManagerBranchController::class, 'assignManager'])->name('manager.branches.assign-manager');
+        Route::patch('/manager/branches/{branch}', [ManagerBranchController::class, 'update'])->name('manager.branches.update');
+        Route::delete('/manager/branches/{branch}', [ManagerBranchController::class, 'destroy'])->name('manager.branches.destroy');
     });
 });
 
-Route::post('/manager/walk-ins', [WalkInWorkController::class, 'store'])
-    ->middleware(['auth', 'verified', 'role:Barbershop Admin', 'active_plan'])
-    ->name('manager.walkins.store');
+Route::middleware(['auth', 'verified', 'role:Branch Manager', 'active_plan'])->group(function () {
+    Route::get('/manager/services', [ManagerServiceController::class, 'index'])->name('manager.services.index');
+    Route::post('/manager/services', [ManagerServiceController::class, 'store'])->name('manager.services.store');
+    Route::patch('/manager/services/{service}', [ManagerServiceController::class, 'update'])->name('manager.services.update');
+    Route::get('/manager/schedules', [ManagerScheduleController::class, 'index'])->name('manager.schedules.index');
+    Route::post('/manager/schedules', [ManagerScheduleController::class, 'store'])->name('manager.schedules.store');
+    Route::delete('/manager/schedules/{schedule}', [ManagerScheduleController::class, 'destroy'])->name('manager.schedules.destroy');
+    Route::post('/manager/queue/{booking}/status', [QueueController::class, 'updateStatus'])->name('manager.queue.status');
+    Route::post('/manager/walk-ins', [WalkInWorkController::class, 'store'])->name('manager.walkins.store');
+});
 
 Route::middleware(['auth', 'verified', 'role:Barber'])->group(function () {
     Route::middleware('active_plan')->group(function () {
         Route::get('/barber', [BarberDashboardController::class, 'index'])->name('barber.dashboard');
+        Route::post('/barber/appointments/{booking}/status', [BarberDashboardController::class, 'updateStatus'])->name('barber.appointments.status');
     });
 });
 
@@ -75,6 +91,9 @@ Route::prefix('booking')->middleware(['auth', 'verified', 'role:Customer'])->gro
         Route::get('/', [CustomerBookingController::class, 'index'])->name('booking.index');
         Route::get('/create', [CustomerBookingController::class, 'create'])->name('booking.create');
         Route::post('/', [CustomerBookingController::class, 'store'])->name('booking.store');
+        Route::delete('/{booking}/cancel', [CustomerBookingController::class, 'cancel'])->name('booking.cancel');
+        Route::patch('/{booking}/reschedule', [CustomerBookingController::class, 'reschedule'])->name('booking.reschedule');
+        Route::post('/{booking}/feedback', [CustomerBookingController::class, 'submitFeedback'])->name('booking.feedback');
     });
 });
 
@@ -121,11 +140,15 @@ Route::prefix('customer')->name('customer.')->middleware(['auth', 'verified', 'r
 });
 
 Route::prefix('customer')->name('customer.')->middleware(['auth', 'verified', 'role:Customer'])->group(function () {
-    Route::get('/services', [App\Http\Controllers\Customer\ServiceController::class, 'index'])->name('services');
-    Route::get('/book/{service}', [App\Http\Controllers\Customer\BookingController::class, 'create'])->name('book');
-    Route::post('/book', [App\Http\Controllers\Customer\BookingController::class, 'store'])->name('book.store');
-    Route::get('/bookings', [App\Http\Controllers\Customer\BookingController::class, 'index'])->name('bookings');
-    Route::delete('/bookings/{booking}/cancel', [App\Http\Controllers\Customer\BookingController::class, 'cancel'])->name('bookings.cancel');
+    Route::middleware('active_plan')->group(function () {
+        Route::get('/services', [App\Http\Controllers\Customer\ServiceController::class, 'index'])->name('services');
+        Route::get('/book/{service}', [App\Http\Controllers\Customer\BookingController::class, 'create'])->name('book');
+        Route::post('/book', [App\Http\Controllers\Customer\BookingController::class, 'store'])->name('book.store');
+        Route::get('/bookings', [App\Http\Controllers\Customer\BookingController::class, 'index'])->name('bookings');
+        Route::delete('/bookings/{booking}/cancel', [App\Http\Controllers\Customer\BookingController::class, 'cancel'])->name('bookings.cancel');
+        Route::patch('/bookings/{booking}/reschedule', [App\Http\Controllers\Customer\BookingController::class, 'reschedule'])->name('bookings.reschedule');
+        Route::post('/bookings/{booking}/feedback', [App\Http\Controllers\Customer\BookingController::class, 'submitFeedback'])->name('bookings.feedback');
+    });
     Route::get('/points', [App\Http\Controllers\Customer\PointsController::class, 'index'])->name('points');
     Route::get('/profile', [App\Http\Controllers\Customer\ProfileController::class, 'edit'])->name('profile');
     Route::put('/profile', [App\Http\Controllers\Customer\ProfileController::class, 'update'])->name('profile.update');

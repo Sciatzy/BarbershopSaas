@@ -7,10 +7,11 @@ use App\Models\Branch;
 use App\Models\User;
 use App\Services\TenantLifecycleNotifier;
 use App\Services\TenantLimitValidator;
+use App\Services\TenantProvisioningService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Spatie\Permission\Models\Role;
 
@@ -19,6 +20,7 @@ class BarberManagementController extends Controller
     public function __construct(
         private TenantLimitValidator $tenantLimitValidator,
         private TenantLifecycleNotifier $notifier,
+        private TenantProvisioningService $tenantProvisioning,
     ) {}
 
     public function index(Request $request): View
@@ -60,9 +62,10 @@ class BarberManagementController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', Password::defaults()],
             'branch_id' => ['nullable', 'integer'],
         ]);
+
+        $temporaryPassword = Str::password(16);
 
         $branchId = null;
 
@@ -87,20 +90,42 @@ class BarberManagementController extends Controller
             'branch_id' => $branchId,
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'password' => Hash::make($temporaryPassword),
         ]);
 
         Role::findOrCreate('Barber', 'web');
         $barber->assignRole('Barber');
 
-        $tenantName = (string) ($user->tenant?->name ?? 'your barbershop');
+        $tenant = $user->tenant;
+        $tenantName = (string) ($tenant?->name ?? 'your barbershop');
+        $assignedDomain = strtolower((string) ($tenant?->primary_domain ?? ''));
 
-        $this->notifier->notifyUser(
+        if ($assignedDomain === '') {
+            $assignedDomain = strtolower((string) $request->getHost());
+            $assignedDomain = preg_replace('/^www\./', '', $assignedDomain) ?? $assignedDomain;
+        }
+
+        if ($assignedDomain === '') {
+            $assignedDomain = (string) parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST);
+        }
+
+        $systemUrl = $this->tenantProvisioning->tenantUrl($assignedDomain);
+        $loginUrl = $this->tenantProvisioning->tenantUrl($assignedDomain, '/login');
+        $dashboardUrl = $this->tenantProvisioning->tenantUrl($assignedDomain, '/barber');
+
+        $this->notifier->notifyUserWithDetails(
             $barber,
-            'Your Barber Account Credentials',
-            "Hi {$barber->name}, your barber account for {$tenantName} is ready. "
-            ."You can sign in using this email: {$barber->email} and password: {$validated['password']}. "
-            .'Please change your password after your first login.'
+            'Your Barber Account Has Been Created',
+            "Hi {$barber->name}, your barber account for {$tenantName} is now active.",
+            [
+                'Login Email' => $barber->email,
+                'Temporary Password' => $temporaryPassword,
+                'Assigned Domain' => $assignedDomain,
+                'System URL' => $systemUrl,
+                'Login URL' => $loginUrl,
+                'Barber Dashboard URL' => $dashboardUrl,
+            ],
+            'For account security, please sign in and change your password immediately.'
         );
 
         return redirect()

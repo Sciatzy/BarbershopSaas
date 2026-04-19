@@ -43,6 +43,7 @@
             <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <h3 class="text-lg font-semibold text-slate-800">Add Barber</h3>
                 <p class="text-sm text-slate-500 mt-1">Create a login for a barber under your tenant.</p>
+                <p class="text-xs text-slate-500 mt-1">Temporary password is generated automatically and sent to the barber email.</p>
 
                 <form method="POST" action="{{ route('manager.barbers.store') }}" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     @csrf
@@ -55,11 +56,6 @@
                     <div>
                         <label for="email" class="block text-sm font-medium text-slate-600">Email</label>
                         <input id="email" name="email" type="email" value="{{ old('email') }}" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
-
-                    <div>
-                        <label for="password" class="block text-sm font-medium text-slate-600">Temporary Password</label>
-                        <input id="password" name="password" type="password" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
                     </div>
 
                     @if (auth()->user()->hasRole('Barbershop Admin'))

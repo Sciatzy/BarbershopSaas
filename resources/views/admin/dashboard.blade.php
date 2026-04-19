@@ -112,7 +112,6 @@
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Plan Tier</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Domain</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Database</th>
-                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Subscription Status</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Plan Availed</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Plan Ends</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">MRR (PHP)</th>
@@ -124,9 +123,15 @@
                             @forelse ($tenants as $tenant)
                                 @php
                                     $subscription = $tenant->latestCashierSubscription;
-                                    $planAvailedAt = $subscription?->created_at;
+                                    $manualPlanDurationDays = 30;
+                                    $hasBillingSubscription = $subscription !== null;
+                                    $planAvailedAt = $subscription?->created_at ?? $tenant->activated_at ?? $tenant->created_at;
                                     $planEndsAt = $subscription?->ends_at;
                                     $subscriptionStatus = $subscription?->stripe_status;
+
+                                    if (! $hasBillingSubscription && $planAvailedAt) {
+                                        $planEndsAt = $planAvailedAt->copy()->addDays($manualPlanDurationDays);
+                                    }
                                 @endphp
                                 <tr>
                                     <td class="px-4 py-3 text-slate-800 font-medium">{{ $tenant->name }}</td>
@@ -154,7 +159,6 @@
                                         @endif
                                     </td>
                                     <td class="px-4 py-3 text-slate-600">{{ $tenant->database_name ?? '-' }}</td>
-                                    <td class="px-4 py-3 text-slate-600 capitalize">{{ $subscriptionStatus ?? 'Not subscribed' }}</td>
                                     <td class="px-4 py-3 text-slate-600">{{ $planAvailedAt ? $planAvailedAt->format('Y-m-d') : '-' }}</td>
                                     <td class="px-4 py-3 text-slate-600">
                                         @if ($planEndsAt)
@@ -167,81 +171,81 @@
                                     </td>
                                     <td class="px-4 py-3 text-slate-600">{{ number_format($planMrrPhp[$tenant->plan_tier] ?? 0, 2) }}</td>
                                     <td class="px-4 py-3 text-slate-600">{{ optional($tenant->created_at)->format('Y-m-d') }}</td>
-                                    <td class="px-4 py-3 text-slate-600" x-data="{ open: false }">
-                                        <button @click="open = true" type="button" class="whitespace-nowrap px-4 py-1.5 rounded-full bg-[#E2D4FF] text-black text-xs font-bold shadow-sm transition-transform hover:scale-105">
+                                    <td class="px-4 py-3 text-slate-600">
+                                        <button
+                                            onclick="(function(){ const target=document.getElementById('tenant-detail-{{ $tenant->id }}'); if(!target) return; const willOpen=target.classList.contains('hidden'); document.querySelectorAll('[id^=tenant-detail-]').forEach(function(row){ row.classList.add('hidden'); }); if(willOpen){ target.classList.remove('hidden'); } })()"
+                                            type="button"
+                                            class="whitespace-nowrap px-4 py-1.5 rounded-full bg-[#E2D4FF] text-black text-xs font-bold shadow-sm transition-transform hover:scale-105"
+                                        >
                                             Manage
                                         </button>
+                                    </td>
+                                </tr>
+                                <tr id="tenant-detail-{{ $tenant->id }}" class="hidden bg-slate-50/70">
+                                    <td colspan="12" class="px-4 py-4">
+                                        <div class="rounded-2xl border border-slate-200 bg-white p-5 space-y-5">
+                                            <div>
+                                                <h4 class="text-base font-semibold text-slate-900">Edit Tenant</h4>
+                                                <p class="text-sm text-slate-500 mt-1">Update details for {{ $tenant->name }}</p>
+                                            </div>
 
-                                        <!-- Edit Modal -->
-                                        <div x-show="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" x-cloak style="display: none;" @keydown.escape.window="open = false">
-                                            <div @click.away="open = false" class="bg-white p-8 rounded-[28px] shadow-2xl flex flex-col w-full max-w-md text-left transform transition-all relative animate-fade-in">
-                                                <button @click="open = false" type="button" class="absolute top-6 right-6 text-gray-400 hover:text-black transition-colors rounded-full p-1 hover:bg-gray-100">
-                                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                                </button>
+                                            <form id="tenant-update-form-{{ $tenant->id }}" method="POST" action="{{ route('admin.tenants.update', ['tenant' => $tenant->id]) }}" class="space-y-4">
+                                                @csrf
+                                                @method('PATCH')
 
-                                                <div class="mb-6">
-                                                    <h3 class="text-2xl font-bold text-gray-900 tracking-tight">Edit Tenant</h3>
-                                                    <p class="text-sm font-medium text-gray-400 mt-1">Update details for {{ $tenant->name }}</p>
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Tenant Name</label>
+                                                        <input type="text" name="name" value="{{ $tenant->name }}" class="w-full rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 font-medium py-2.5 px-4 shadow-sm" required>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Plan Tier</label>
+                                                        <select name="plan_tier" class="w-full rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 font-medium py-2.5 px-4 shadow-sm" required>
+                                                            @foreach (['starter', 'professional', 'business', 'enterprise'] as $tier)
+                                                                <option value="{{ $tier }}" @selected($tenant->plan_tier === $tier)>{{ ucfirst($tier) }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>
+                                                        <select name="status" class="w-full rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 font-medium py-2.5 px-4 shadow-sm" required>
+                                                            @foreach (['pending', 'active', 'inactive', 'suspended'] as $status)
+                                                                <option value="{{ $status }}" @selected(($tenant->status ?? 'pending') === $status)>{{ ucfirst($status) }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Primary Domain</label>
+                                                        <input type="text" name="primary_domain" value="{{ $tenant->primary_domain }}" placeholder="e.g. myshop.localhost:8000" class="w-full rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 font-medium py-2.5 px-4 shadow-sm">
+                                                    </div>
+
+                                                    <div class="md:col-span-2">
+                                                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Database Name</label>
+                                                        <input type="text" name="database_name" value="{{ $tenant->database_name }}" placeholder="tenant_db_1" class="w-full rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 font-medium py-2.5 px-4 shadow-sm">
+                                                    </div>
                                                 </div>
+                                            </form>
 
-                                                <form id="tenant-update-form-{{ $tenant->id }}" method="POST" action="{{ route('admin.tenants.update', ['tenant' => $tenant->id]) }}" class="space-y-5">
+                                            <div class="flex flex-wrap justify-end gap-3">
+                                                <a href="{{ route('admin.customer.dashboard', ['tenant' => $tenant->id]) }}" class="px-5 py-2.5 rounded-full bg-blue-100 border border-blue-200 text-blue-800 font-bold hover:bg-blue-200 transition-colors shadow-sm" target="_blank" rel="noopener">
+                                                    Open Customer View
+                                                </a>
+                                                <form method="POST" action="{{ route('admin.tenants.resend-credentials', ['tenant' => $tenant->id]) }}" onsubmit="return confirm('Regenerate and email temporary credentials to this tenant owner?');">
                                                     @csrf
-                                                    @method('PATCH')
-
-                                                    <div>
-                                                        <label class="block text-sm font-bold text-gray-700 mb-1.5">Tenant Name</label>
-                                                        <input type="text" name="name" value="{{ $tenant->name }}" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm" required>
-                                                    </div>
-
-                                                    <div class="grid grid-cols-2 gap-4">
-                                                        <div>
-                                                            <label class="block text-sm font-bold text-gray-700 mb-1.5">Plan Tier</label>
-                                                            <select name="plan_tier" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm" required>
-                                                                @foreach (['starter', 'professional', 'business', 'enterprise'] as $tier)
-                                                                    <option value="{{ $tier }}" @selected($tenant->plan_tier === $tier)>{{ ucfirst($tier) }}</option>
-                                                                @endforeach
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label class="block text-sm font-bold text-gray-700 mb-1.5">Status</label>
-                                                            <select name="status" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm" required>
-                                                                @foreach (['pending', 'active', 'inactive', 'suspended'] as $status)
-                                                                    <option value="{{ $status }}" @selected(($tenant->status ?? 'pending') === $status)>{{ ucfirst($status) }}</option>
-                                                                @endforeach
-                                                            </select>
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <label class="block text-sm font-bold text-gray-700 mb-1.5">Primary Domain</label>
-                                                        <input type="text" name="primary_domain" value="{{ $tenant->primary_domain }}" placeholder="e.g. myshop.localhost:8000" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm">
-                                                    </div>
-
-                                                    <div>
-                                                        <label class="block text-sm font-bold text-gray-700 mb-1.5">Database Name</label>
-                                                        <input type="text" name="database_name" value="{{ $tenant->database_name }}" placeholder="tenant_db_1" class="w-full rounded-xl border border-gray-200 bg-[#F3F4F6] text-gray-900 focus:ring-2 focus:ring-[#E2D4FF] focus:border-[#E2D4FF] font-medium py-2.5 px-4 shadow-sm">
-                                                    </div>
-
+                                                    <button type="submit" class="px-5 py-2.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 font-bold hover:bg-amber-200 transition-colors shadow-sm">Resend Credentials</button>
                                                 </form>
-
-                                                <div class="pt-4 flex justify-end gap-3">
-                                                    <a href="{{ route('admin.customer.dashboard', ['tenant' => $tenant->id]) }}" class="px-5 py-2.5 rounded-full bg-blue-100 border border-blue-200 text-blue-800 font-bold hover:bg-blue-200 transition-colors shadow-sm" target="_blank" rel="noopener">
-                                                        Open Customer View
-                                                    </a>
-                                                    <form method="POST" action="{{ route('admin.tenants.resend-credentials', ['tenant' => $tenant->id]) }}" onsubmit="return confirm('Regenerate and email temporary credentials to this tenant owner?');">
-                                                        @csrf
-                                                        <button type="submit" class="px-5 py-2.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 font-bold hover:bg-amber-200 transition-colors shadow-sm">Resend Credentials</button>
-                                                    </form>
-                                                    <button type="button" @click="open = false" class="px-5 py-2.5 rounded-full bg-white border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors shadow-sm">Cancel</button>
-                                                    <button type="submit" form="tenant-update-form-{{ $tenant->id }}" class="px-5 py-2.5 rounded-full bg-black text-white font-bold hover:bg-gray-800 transition-colors shadow-sm tracking-wide">Save Changes</button>
-                                                </div>
+                                                <button type="button" onclick="document.getElementById('tenant-detail-{{ $tenant->id }}')?.classList.add('hidden')" class="px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
+                                                <button type="submit" form="tenant-update-form-{{ $tenant->id }}" class="px-5 py-2.5 rounded-full bg-black text-white font-bold hover:bg-slate-800 transition-colors shadow-sm tracking-wide">Save Changes</button>
                                             </div>
                                         </div>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="12" class="px-4 py-6 text-center text-slate-400">No tenants found.</td>
+                                    <td colspan="11" class="px-4 py-6 text-center text-slate-400">No tenants found.</td>
                                 </tr>
                             @endforelse
                         </tbody>

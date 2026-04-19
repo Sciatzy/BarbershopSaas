@@ -13,6 +13,11 @@ class ServiceController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Branch Manager')) {
+            abort(403);
+        }
+
         $tenantId = (string) ($user->tenant_id ?? '');
 
         $services = Service::query()
@@ -28,7 +33,13 @@ class ServiceController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $tenantId = (string) ($request->user()->tenant_id ?? '');
+        $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Branch Manager')) {
+            abort(403);
+        }
+
+        $tenantId = (string) ($user->tenant_id ?? '');
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -55,7 +66,13 @@ class ServiceController extends Controller
 
     public function update(Request $request, Service $service): RedirectResponse
     {
-        $tenantId = (string) ($request->user()->tenant_id ?? '');
+        $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Branch Manager')) {
+            abort(403);
+        }
+
+        $tenantId = (string) ($user->tenant_id ?? '');
 
         abort_if((string) ($service->tenant_id ?? '') !== $tenantId, 403);
 

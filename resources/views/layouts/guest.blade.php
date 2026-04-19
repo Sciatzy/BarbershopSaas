@@ -17,7 +17,7 @@
     <body class="font-sans text-gray-900 antialiased bg-[#e9f2fa]">
         <div class="min-h-screen flex items-center justify-center p-4 sm:p-8">
             <!-- Main Login Card -->
-            <div class="w-full max-w-[1000px] bg-white rounded-[2rem] shadow-2xl flex overflow-hidden lg:h-[650px] animate-fade-in">
+            <div class="w-full max-w-[1000px] bg-white rounded-[2rem] shadow-2xl flex overflow-hidden lg:min-h-[650px] animate-fade-in">
 
                 <!-- Left Side: Form Container -->
                 <div class="w-full lg:w-1/2 p-8 sm:p-12 lg:p-16 flex flex-col justify-center overflow-y-auto bg-white">

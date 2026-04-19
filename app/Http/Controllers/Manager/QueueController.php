@@ -13,7 +13,8 @@ class QueueController extends Controller
 {
     public function index(Request $request): View
     {
-        $tenantId = (string) ($request->user()->tenant_id ?? '');
+        $user = $request->user();
+        $tenantId = (string) ($user->tenant_id ?? '');
 
         $bookings = Booking::query()
             ->withoutGlobalScopes()
@@ -22,6 +23,10 @@ class QueueController extends Controller
             ->with(['customer', 'service'])
             ->orderBy('booked_at')
             ->orderBy('created_at')
+            ->when(
+                $user && $user->hasRole('Branch Manager') && ! empty($user->branch_id),
+                fn ($query) => $query->where('branch_id', $user->branch_id)
+            )
             ->get();
 
         return view('manager.queue.index', [
@@ -31,13 +36,23 @@ class QueueController extends Controller
 
     public function updateStatus(Request $request, Booking $booking, PointsService $pointsService): RedirectResponse
     {
+        $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Branch Manager')) {
+            abort(403);
+        }
+
         $validated = $request->validate([
             'status' => ['required', 'in:in_progress,completed,cancelled'],
         ]);
 
-        $tenantId = (string) ($request->user()->tenant_id ?? '');
+        $tenantId = (string) ($user->tenant_id ?? '');
 
         if ((string) $booking->tenant_id !== $tenantId) {
+            abort(403);
+        }
+
+        if ($user->hasRole('Branch Manager') && ! empty($user->branch_id) && (int) ($booking->branch_id ?? 0) !== (int) $user->branch_id) {
             abort(403);
         }
 

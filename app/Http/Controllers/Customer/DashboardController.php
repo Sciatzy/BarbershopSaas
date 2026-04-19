@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends Controller
 {
@@ -16,6 +17,7 @@ class DashboardController extends Controller
     {
         $user = $request->user();
         $isCustomer = $user->hasRole('Customer');
+        $bookingSortColumn = Schema::hasColumn('bookings', 'booked_at') ? 'booked_at' : 'created_at';
 
         $tenant = null;
 
@@ -48,14 +50,14 @@ class DashboardController extends Controller
         if ($isCustomer) {
             $recentBookings = Booking::where('customer_id', $user->id)
                 ->with(['service', 'staff'])
-                ->latest('booked_at')
+                ->latest($bookingSortColumn)
                 ->take(5)
                 ->get();
 
             $activeBooking = Booking::where('customer_id', $user->id)
                 ->whereIn('status', ['queued', 'in_progress'])
                 ->with(['service', 'staff'])
-                ->latest('booked_at')
+                ->latest($bookingSortColumn)
                 ->first();
 
             $pointsBalance = $user->points_balance ?? 0;
@@ -76,7 +78,7 @@ class DashboardController extends Controller
                 ->withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->with(['service', 'staff'])
-                ->latest('booked_at')
+                ->latest($bookingSortColumn)
                 ->take(5)
                 ->get();
 
@@ -85,7 +87,7 @@ class DashboardController extends Controller
                 ->where('tenant_id', $tenantId)
                 ->whereIn('status', ['queued', 'in_progress'])
                 ->with(['service', 'staff'])
-                ->latest('booked_at')
+                ->latest($bookingSortColumn)
                 ->first();
 
             $pointsBalance = 0;

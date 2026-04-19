@@ -13,9 +13,14 @@ class TenantProvisioningService
 {
     public function ensureDomain(Tenant $tenant): string
     {
-        $currentDomain = strtolower(trim((string) $tenant->primary_domain));
+        $rawCurrentDomain = (string) $tenant->primary_domain;
+        $currentDomain = $this->normalizeDomainForStorage($rawCurrentDomain);
 
         if ($currentDomain !== '') {
+            if ($currentDomain !== strtolower(trim($rawCurrentDomain))) {
+                $tenant->forceFill(['primary_domain' => $currentDomain])->save();
+            }
+
             return $currentDomain;
         }
 
@@ -51,7 +56,7 @@ class TenantProvisioningService
 
     public function tenantUrl(string $tenantDomain, string $path = ''): string
     {
-        $tenantDomain = trim(strtolower($tenantDomain));
+        $tenantDomain = $this->normalizeDomainForStorage($tenantDomain);
         $appUrl = (string) config('app.url', 'http://localhost');
         $scheme = (string) parse_url($appUrl, PHP_URL_SCHEME);
         $port = parse_url($appUrl, PHP_URL_PORT);
@@ -61,8 +66,23 @@ class TenantProvisioningService
         }
 
         $portSegment = '';
+        $domainHasExplicitPort = preg_match('/:\\d+$/', $tenantDomain) === 1;
 
-        if (is_int($port) && ! in_array($port, [80, 443], true)) {
+        // In local/dev environments APP_URL often omits :8000 while artisan serve uses it.
+        // Use the active request port as a fallback when available.
+        if (! is_int($port) && app()->runningInConsole() === false) {
+            try {
+                $requestPort = request()->getPort();
+
+                if (is_int($requestPort)) {
+                    $port = $requestPort;
+                }
+            } catch (\Throwable) {
+                // Ignore request resolution failures and keep APP_URL-derived behavior.
+            }
+        }
+
+        if (! $domainHasExplicitPort && is_int($port) && ! in_array($port, [80, 443], true)) {
             $portSegment = ':'.$port;
         }
 
@@ -73,6 +93,28 @@ class TenantProvisioningService
         }
 
         return sprintf('%s://%s%s%s', $scheme, $tenantDomain, $portSegment, $normalizedPath);
+    }
+
+    private function normalizeDomainForStorage(string $domain): string
+    {
+        $domain = strtolower(trim($domain));
+
+        if ($domain === '') {
+            return '';
+        }
+
+        if (str_starts_with($domain, 'http://') || str_starts_with($domain, 'https://')) {
+            $parsedHost = (string) parse_url($domain, PHP_URL_HOST);
+            $parsedPort = parse_url($domain, PHP_URL_PORT);
+
+            if ($parsedHost !== '') {
+                $domain = $parsedHost.(is_int($parsedPort) ? ':'.$parsedPort : '');
+            }
+        }
+
+        $domain = preg_replace('#/.*$#', '', $domain) ?? $domain;
+
+        return trim($domain, " \t\n\r\0\x0B/");
     }
 
     public function suggestDatabaseName(string $tenantName): string
