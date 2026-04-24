@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
             <h2 class="text-2xl font-bold text-slate-800">Barbers Management</h2>
-            <p class="text-sm text-slate-500 mt-1">Manage tenant barbers and staff.</p>
+            <p class="text-sm text-slate-500 mt-1">View available barbers and assign them to branches.</p>
         </x-slot>
 
     <div class="py-8">
@@ -40,25 +40,29 @@
                 </div>
             </div>
 
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                <h3 class="text-lg font-semibold text-slate-800">Add Barber</h3>
-                <p class="text-sm text-slate-500 mt-1">Create a login for a barber under your tenant.</p>
-                <p class="text-xs text-slate-500 mt-1">Temporary password is generated automatically and sent to the barber email.</p>
+            @php
+                $isBarbershopAdmin = auth()->user()?->hasRole('Barbershop Admin');
+            @endphp
 
-                <form method="POST" action="{{ route('manager.barbers.store') }}" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    @csrf
+            @if ($isBarbershopAdmin)
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                    <h3 class="text-lg font-semibold text-slate-800">Add Barber</h3>
+                    <p class="text-sm text-slate-500 mt-1">Create a login for a barber under your tenant.</p>
+                    <p class="text-xs text-slate-500 mt-1">Temporary password is generated automatically and sent to the barber email.</p>
 
-                    <div>
-                        <label for="name" class="block text-sm font-medium text-slate-600">Name</label>
-                        <input id="name" name="name" type="text" value="{{ old('name') }}" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
+                    <form method="POST" action="{{ route('manager.barbers.store') }}" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        @csrf
 
-                    <div>
-                        <label for="email" class="block text-sm font-medium text-slate-600">Email</label>
-                        <input id="email" name="email" type="email" value="{{ old('email') }}" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
+                        <div>
+                            <label for="name" class="block text-sm font-medium text-slate-600">Name</label>
+                            <input id="name" name="name" type="text" value="{{ old('name') }}" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
 
-                    @if (auth()->user()->hasRole('Barbershop Admin'))
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-slate-600">Email</label>
+                            <input id="email" name="email" type="email" value="{{ old('email') }}" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+
                         <div>
                             <label for="branch_id" class="block text-sm font-medium text-slate-600">Branch (optional)</label>
                             <select id="branch_id" name="branch_id" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
@@ -68,27 +72,34 @@
                                 @endforeach
                             </select>
                         </div>
-                    @endif
 
-                    <div class="md:col-span-2">
-                        <button type="submit" class="rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600" >
-                            Create Barber Account
-                        </button>
-                    </div>
-                </form>
-            </div>
+                        <div class="md:col-span-2">
+                            <button type="submit" class="rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600" >
+                                Create Barber Account
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            @else
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Account creation is restricted to the barbershop owner. You can still view all available barbers and assign them to branches below.
+                </div>
+            @endif
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div class="p-6 border-b border-gray-100">
                     <h3 class="text-lg font-semibold text-slate-800">Existing Barbers</h3>
                 </div>
                 <div class="overflow-x-auto">
+                    @php
+                        $branchesById = $branches->keyBy('id');
+                    @endphp
                     <table class="min-w-full divide-y-0 border-b border-slate-100 text-sm">
                         <thead class="bg-slate-50 text-slate-500 rounded-t-xl">
                             <tr>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Name</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Email</th>
-                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Branch ID</th>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Branch Assignment</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Created</th>
                             </tr>
                         </thead>
@@ -97,7 +108,26 @@
                                 <tr>
                                     <td class="px-4 py-3 text-slate-800">{{ $barber->name }}</td>
                                     <td class="px-4 py-3 text-slate-600">{{ $barber->email }}</td>
-                                    <td class="px-4 py-3 text-slate-600">{{ $barber->branch_id ?? '-' }}</td>
+                                    <td class="px-4 py-3 text-slate-600">
+                                        <form method="POST" action="{{ route('manager.barbers.branch', ['barberId' => $barber->id]) }}" class="flex flex-col md:flex-row md:items-center gap-2">
+                                            @csrf
+                                            @method('PATCH')
+                                            <select name="branch_id" class="w-full md:w-56 rounded-md border-slate-200 bg-slate-50 text-xs focus:border-blue-500 focus:ring-blue-500">
+                                                <option value="">Unassigned</option>
+                                                @foreach ($branches as $branch)
+                                                    <option value="{{ $branch->id }}" @selected((string) $barber->branch_id === (string) $branch->id)>
+                                                        {{ $branch->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            <button type="submit" class="rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                                                Save Assignment
+                                            </button>
+                                        </form>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            Current: {{ $barber->branch_id ? ($branchesById->get($barber->branch_id)?->name ?? 'Unknown branch') : 'Unassigned' }}
+                                        </p>
+                                    </td>
                                     <td class="px-4 py-3 text-slate-600">{{ optional($barber->created_at)->format('Y-m-d') }}</td>
                                 </tr>
                             @empty

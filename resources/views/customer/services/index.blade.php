@@ -14,13 +14,13 @@
             <div style="font-size:28px; margin-bottom:8px;">✂</div>
             <div style="font-family:var(--font-display); font-size:26px; margin-bottom:8px; color:var(--cream);">{{ $service->name }}</div>
             <div style="color:var(--muted); font-size:13px; margin-bottom:24px; flex:1;">{{ $service->description ?? 'Premium grooming service.' }}</div>
-            
+
             <div style="display:flex; justify-content:space-between; align-items:center; padding-top:16px; border-top:1px solid var(--border); margin-bottom:20px;">
                 <div style="font-family:var(--font-mono); font-size:16px; color:var(--cream);">₱{{ number_format($service->base_price ?? $service->price ?? 0, 2) }}</div>
                 <div style="font-family:var(--font-mono); font-size:14px; color:var(--muted);">{{ $service->duration_minutes ?? 30 }} min</div>
             </div>
 
-            <a href="{{ route('customer.book', $service->id) }}" style="display:block; text-align:center; background:var(--rust); color:var(--cream); width:100%; border-radius:var(--radius); padding:12px; font-weight:500; font-size:14px; font-family:var(--font-body); border:none; cursor:pointer;">
+            <a href="{{ route('customer.book', $service->id) }}" class="tenant-btn" style="display:block; text-align:center; background:var(--rust); color:var(--cream); width:100%; border-radius:var(--radius); padding:12px; font-weight:500; font-size:14px; font-family:var(--font-body); border:none; cursor:pointer;">
                 [Book This Service]
             </a>
         </div>

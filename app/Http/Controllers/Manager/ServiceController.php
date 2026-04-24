@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Service;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ServiceController extends Controller
@@ -14,7 +16,7 @@ class ServiceController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || ! $user->hasRole('Branch Manager')) {
+        if (! $user || ! $user->hasAnyRole(['Barbershop Admin', 'Branch Manager'])) {
             abort(403);
         }
 
@@ -23,11 +25,21 @@ class ServiceController extends Controller
         $services = Service::query()
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->orderBy('name')
+            ->get();
+
+        $archivedServices = Service::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNotNull('archived_at')
+            ->orderByDesc('archived_at')
             ->orderBy('name')
             ->get();
 
         return view('manager.services.index', [
             'services' => $services,
+            'archivedServices' => $archivedServices,
         ]);
     }
 
@@ -35,7 +47,7 @@ class ServiceController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || ! $user->hasRole('Branch Manager')) {
+        if (! $user || ! $user->hasAnyRole(['Barbershop Admin', 'Branch Manager'])) {
             abort(403);
         }
 
@@ -43,11 +55,14 @@ class ServiceController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'type' => ['nullable', Rule::in(['standard', 'premium'])],
             'description' => ['nullable', 'string', 'max:1000'],
             'base_price' => ['required', 'numeric', 'min:0'],
             'duration_minutes' => ['required', 'integer', 'min:5', 'max:600'],
             'is_active' => ['nullable', 'boolean'],
         ]);
+
+        $resolvedType = (string) ($validated['type'] ?? (((float) $validated['base_price']) >= 350 ? 'premium' : 'standard'));
 
         Service::query()->withoutGlobalScopes()->create([
             'tenant_id' => $tenantId,
@@ -58,7 +73,8 @@ class ServiceController extends Controller
             'duration_min' => $validated['duration_minutes'],
             'duration_minutes' => $validated['duration_minutes'],
             'is_active' => (bool) ($validated['is_active'] ?? true),
-            'type' => ((float) $validated['base_price']) >= 350 ? 'premium' : 'standard',
+            'archived_at' => null,
+            'type' => $resolvedType,
         ]);
 
         return redirect()->route('manager.services.index')->with('billing_status', 'Service added successfully.');
@@ -68,7 +84,7 @@ class ServiceController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || ! $user->hasRole('Branch Manager')) {
+        if (! $user || ! $user->hasAnyRole(['Barbershop Admin', 'Branch Manager'])) {
             abort(403);
         }
 
@@ -76,13 +92,21 @@ class ServiceController extends Controller
 
         abort_if((string) ($service->tenant_id ?? '') !== $tenantId, 403);
 
+        if ($service->archived_at !== null) {
+            return redirect()->route('manager.services.index')
+                ->with('billing_error', 'Archived services cannot be edited. Restore the service first.');
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'type' => ['nullable', Rule::in(['standard', 'premium'])],
             'description' => ['nullable', 'string', 'max:1000'],
             'base_price' => ['required', 'numeric', 'min:0'],
             'duration_minutes' => ['required', 'integer', 'min:5', 'max:600'],
             'is_active' => ['nullable', 'boolean'],
         ]);
+
+        $resolvedType = (string) ($validated['type'] ?? (((float) $validated['base_price']) >= 350 ? 'premium' : 'standard'));
 
         $service->forceFill([
             'name' => $validated['name'],
@@ -92,9 +116,53 @@ class ServiceController extends Controller
             'duration_min' => $validated['duration_minutes'],
             'duration_minutes' => $validated['duration_minutes'],
             'is_active' => (bool) ($validated['is_active'] ?? false),
-            'type' => ((float) $validated['base_price']) >= 350 ? 'premium' : 'standard',
+            'type' => $resolvedType,
         ])->save();
 
         return redirect()->route('manager.services.index')->with('billing_status', 'Service updated successfully.');
+    }
+
+    public function destroy(Request $request, Service $service): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->hasAnyRole(['Barbershop Admin', 'Branch Manager'])) {
+            abort(403);
+        }
+
+        $tenantId = (string) ($user->tenant_id ?? '');
+
+        abort_if((string) ($service->tenant_id ?? '') !== $tenantId, 403);
+
+        if ($service->archived_at !== null) {
+            return redirect()->route('manager.services.index')->with('billing_status', 'Service is already archived.');
+        }
+
+        $service->forceFill([
+            'is_active' => false,
+            'archived_at' => Carbon::now(),
+        ])->save();
+
+        return redirect()->route('manager.services.index')->with('billing_status', 'Service archived successfully.');
+    }
+
+    public function restore(Request $request, Service $service): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->hasAnyRole(['Barbershop Admin', 'Branch Manager'])) {
+            abort(403);
+        }
+
+        $tenantId = (string) ($user->tenant_id ?? '');
+
+        abort_if((string) ($service->tenant_id ?? '') !== $tenantId, 403);
+
+        $service->forceFill([
+            'archived_at' => null,
+            'is_active' => true,
+        ])->save();
+
+        return redirect()->route('manager.services.index')->with('billing_status', 'Service restored successfully.');
     }
 }

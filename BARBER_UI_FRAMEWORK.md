@@ -182,3 +182,7 @@ Do not modify RBAC logic in these files unless asked:
 - Status badges are readable and consistent
 - RBAC boundaries remain unchanged
 - Existing data bindings continue to work without controller changes
+
+
+php artisan app:sync-system-udpates-from-app-version 
+

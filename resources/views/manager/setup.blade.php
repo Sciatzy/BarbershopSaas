@@ -19,7 +19,7 @@
                         </div>
                     @endif
 
-                    <form method="POST" action="{{ route('manager.setup.store', [], false) }}" class="space-y-6">
+                    <form method="POST" action="{{ route('manager.setup.store', [], false) }}" class="space-y-6" enctype="multipart/form-data">
                         @csrf
 
                         <!-- Shop Name -->
@@ -67,6 +67,53 @@
                                 <x-input-label for="brand_color_secondary" value="Shop Secondary Color" />
                                 <p class="text-xs text-gray-500 mb-2">Button/CTA color used in the customer dashboard.</p>
                                 <input id="brand_color_secondary" name="brand_color_secondary" type="color" value="{{ old('brand_color_secondary', $tenant->brand_color_secondary ?? '#B54B2A') }}" class="h-11 w-full rounded border border-gray-300 bg-white p-1">
+                            </div>
+                        </div>
+
+                        <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <x-input-label for="customer_theme" value="Customer Theme" />
+                                <select id="customer_theme" name="customer_theme" class="mt-1 w-full rounded-md border-gray-300 bg-white text-sm focus:border-amber-500 focus:ring-amber-500">
+                                    <option value="dark" @selected(old('customer_theme', $tenant->customer_theme ?? 'dark') === 'dark')>Dark</option>
+                                    <option value="light" @selected(old('customer_theme', $tenant->customer_theme ?? 'dark') === 'light')>Light</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <x-input-label for="customer_font" value="Customer Font Style" />
+                                <select id="customer_font" name="customer_font" class="mt-1 w-full rounded-md border-gray-300 bg-white text-sm focus:border-amber-500 focus:ring-amber-500">
+                                    <option value="dm_sans" @selected(old('customer_font', $tenant->customer_font ?? 'dm_sans') === 'dm_sans')>DM Sans</option>
+                                    <option value="poppins" @selected(old('customer_font', $tenant->customer_font ?? 'dm_sans') === 'poppins')>Poppins</option>
+                                    <option value="space_grotesk" @selected(old('customer_font', $tenant->customer_font ?? 'dm_sans') === 'space_grotesk')>Space Grotesk</option>
+                                    <option value="lora" @selected(old('customer_font', $tenant->customer_font ?? 'dm_sans') === 'lora')>Lora</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <x-input-label for="customer_button_style" value="Button Style" />
+                                <select id="customer_button_style" name="customer_button_style" class="mt-1 w-full rounded-md border-gray-300 bg-white text-sm focus:border-amber-500 focus:ring-amber-500">
+                                    <option value="rounded" @selected(old('customer_button_style', $tenant->customer_button_style ?? 'rounded') === 'rounded')>Rounded</option>
+                                    <option value="pill" @selected(old('customer_button_style', $tenant->customer_button_style ?? 'rounded') === 'pill')>Pill</option>
+                                    <option value="sharp" @selected(old('customer_button_style', $tenant->customer_button_style ?? 'rounded') === 'sharp')>Sharp</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <x-input-label for="logo" value="Shop Logo (optional)" />
+                                <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" class="mt-1 block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-amber-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-amber-700 hover:file:bg-amber-100">
+                                @if (!empty($tenant->logo_path))
+                                    <img src="{{ asset('storage/'.$tenant->logo_path) }}" alt="Current logo" class="mt-3 h-14 w-auto rounded border border-gray-200 bg-white p-1">
+                                @endif
+                            </div>
+
+                            <div>
+                                <x-input-label for="hero_image" value="Customer Hero Image (optional)" />
+                                <input id="hero_image" name="hero_image" type="file" accept="image/png,image/jpeg,image/webp" class="mt-1 block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-amber-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-amber-700 hover:file:bg-amber-100">
+                                @if (!empty($tenant->hero_image_path))
+                                    <img src="{{ asset('storage/'.$tenant->hero_image_path) }}" alt="Current hero image" class="mt-3 h-20 w-full max-w-xs rounded border border-gray-200 object-cover">
+                                @endif
                             </div>
                         </div>
 

@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -47,6 +49,17 @@ class LoginRequest extends FormRequest
             'password' => trim((string) $this->input('password')),
         ];
 
+        if ($this->isCentralDomainRequest() && $this->hasDuplicateCustomerAccountsAcrossTenants($credentials['email'])) {
+            $shopUrls = $this->duplicateCustomerShopUrls($credentials['email']);
+            $message = empty($shopUrls)
+                ? 'This email is used by multiple customer accounts. Please log in using your shop URL.'
+                : 'This email is used by multiple customer accounts. Please log in using one of your shop URLs: '.implode(', ', $shopUrls);
+
+            throw ValidationException::withMessages([
+                'email' => $message,
+            ]);
+        }
+
         if (! Auth::attempt($credentials, $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
@@ -87,5 +100,73 @@ class LoginRequest extends FormRequest
     public function throttleKey(): string
     {
         return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+    }
+
+    private function isCentralDomainRequest(): bool
+    {
+        $host = Str::lower((string) $this->getHost());
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        $centralDomains = array_map(
+            static fn ($domain) => Str::lower((string) $domain),
+            (array) config('tenancy.central_domains', [])
+        );
+
+        return in_array($host, $centralDomains, true);
+    }
+
+    private function hasDuplicateCustomerAccountsAcrossTenants(string $email): bool
+    {
+        $tenantCount = User::query()
+            ->withoutGlobalScopes()
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->role('Customer')
+            ->whereNotNull('tenant_id')
+            ->distinct('tenant_id')
+            ->count('tenant_id');
+
+        return $tenantCount > 1;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function duplicateCustomerShopUrls(string $email): array
+    {
+        $tenantIds = User::query()
+            ->withoutGlobalScopes()
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->role('Customer')
+            ->whereNotNull('tenant_id')
+            ->distinct()
+            ->pluck('tenant_id')
+            ->filter()
+            ->values();
+
+        if ($tenantIds->count() <= 1) {
+            return [];
+        }
+
+        $domains = Tenant::query()
+            ->withoutGlobalScopes()
+            ->whereIn('id', $tenantIds->all())
+            ->pluck('primary_domain')
+            ->map(static fn ($domain) => Str::lower(trim((string) $domain)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $port = (int) $this->getPort();
+        $portSuffix = in_array($port, [80, 443], true) ? '' : ':'.$port;
+
+        $urls = array_map(
+            static fn (string $domain) => 'http://'.$domain.$portSuffix,
+            $domains,
+        );
+
+        sort($urls);
+
+        return $urls;
     }
 }

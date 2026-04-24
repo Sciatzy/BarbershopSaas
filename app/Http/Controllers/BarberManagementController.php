@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Spatie\Permission\Models\Role;
 
@@ -53,6 +54,11 @@ class BarberManagementController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Barbershop Admin')) {
+            abort(403);
+        }
+
         $tenantId = (string) ($user->tenant_id ?? '');
 
         if ($tenantId === '') {
@@ -69,14 +75,16 @@ class BarberManagementController extends Controller
 
         $branchId = null;
 
-        if ($user->hasRole('Branch Manager')) {
-            $branchId = $user->branch_id;
-        } elseif (! empty($validated['branch_id'])) {
+        if (! empty($validated['branch_id'])) {
             $branchId = Branch::query()
                 ->withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->where('id', (int) $validated['branch_id'])
                 ->value('id');
+
+            if (! $branchId) {
+                return back()->with('barber_error', 'Selected branch is invalid for this tenant.');
+            }
         }
 
         try {
@@ -131,5 +139,46 @@ class BarberManagementController extends Controller
         return redirect()
             ->route('manager.barbers.index')
             ->with('barber_status', 'Barber account created successfully.');
+    }
+
+    public function updateBranchAssignment(Request $request, int $barberId): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->hasAnyRole(['Barbershop Admin', 'Branch Manager'])) {
+            abort(403);
+        }
+
+        $tenantId = (string) ($user->tenant_id ?? '');
+
+        if ($tenantId === '') {
+            return back()->with('barber_error', 'No tenant is assigned to your account.');
+        }
+
+        $validated = $request->validate([
+            'branch_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('branches', 'id')->where(
+                    fn ($query) => $query->where('tenant_id', $tenantId)
+                ),
+            ],
+        ]);
+
+        $barber = User::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $barberId)
+            ->role('Barber')
+            ->first();
+
+        if (! $barber) {
+            return back()->with('barber_error', 'Selected barber account is invalid for this tenant.');
+        }
+
+        $barber->branch_id = $validated['branch_id'] ?? null;
+        $barber->save();
+
+        return back()->with('barber_status', 'Barber branch assignment updated successfully.');
     }
 }

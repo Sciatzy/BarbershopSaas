@@ -32,7 +32,7 @@ class BookingController extends Controller
             ->latest('created_at')
             ->get();
 
-        return view('customer.booking.index', [
+        return view('customer.bookings.index', [
             'bookings' => $bookings,
         ]);
     }
@@ -52,6 +52,7 @@ class BookingController extends Controller
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
+            ->whereNull('archived_at')
             ->orderBy('name')
             ->get();
 
@@ -65,7 +66,7 @@ class BookingController extends Controller
         $routeServiceId = (int) ($request->route('service') ?? 0);
         $selectedServiceId = $routeServiceId > 0 ? $routeServiceId : (int) old('service_id', 0);
 
-        return view('customer.booking.create', [
+        return view('customer.bookings.create', [
             'branches' => $branches,
             'services' => $services,
             'barbers' => $barbers,
@@ -101,6 +102,7 @@ class BookingController extends Controller
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
+            ->whereNull('archived_at')
             ->findOrFail($validated['service_id']);
 
         $branch = Branch::query()
@@ -187,7 +189,7 @@ class BookingController extends Controller
             return back()->withErrors(['booking' => 'Unable to create booking right now. Please try again.'])->withInput();
         }
 
-        return redirect()->route('booking.index')
+        return redirect()->route('customer.bookings')
             ->with('status', "You're in! Booking #{$booking->id} confirmed.");
     }
 

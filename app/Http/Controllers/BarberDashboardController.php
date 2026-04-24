@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Booking;
 use App\Models\PointTransaction;
 use App\Models\Schedule;
+use App\Models\Tenant;
 use App\Services\PointsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,12 +18,15 @@ class BarberDashboardController extends Controller
     {
         $user = $request->user();
         $tenantId = (string) ($user->tenant_id ?? '');
+        $tenant = $tenantId !== '' ? Tenant::query()->find($tenantId) : null;
+        $canUpdateAppointmentStatus = $tenant?->dashboardFeatureEnabled('barber', 'update_appointment_status', true) ?? true;
 
         if ($tenantId === '') {
             return view('barber.dashboard', [
                 'scheduleToday' => collect(),
                 'appointmentsToday' => collect(),
                 'totalPoints' => 0,
+                'canUpdateAppointmentStatus' => true,
             ]);
         }
 
@@ -64,6 +68,7 @@ class BarberDashboardController extends Controller
             'scheduleToday' => $scheduleToday,
             'appointmentsToday' => $appointmentsToday,
             'totalPoints' => $totalPoints,
+            'canUpdateAppointmentStatus' => $canUpdateAppointmentStatus,
         ]);
     }
 

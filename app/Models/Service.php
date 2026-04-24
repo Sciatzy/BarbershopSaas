@@ -18,6 +18,7 @@ class Service extends Model
         'base_price',
         'duration_min',
         'is_active',
+        'archived_at',
         // Compatibility with existing service schema.
         'type',
         'price',
@@ -30,6 +31,7 @@ class Service extends Model
             'base_price' => 'decimal:2',
             'price' => 'decimal:2',
             'is_active' => 'boolean',
+            'archived_at' => 'datetime',
         ];
     }
 

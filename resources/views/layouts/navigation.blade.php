@@ -1,13 +1,32 @@
 <!-- Sidebar replacing old top-nav -->
-<aside class="w-[260px] flex-shrink-0 bg-[#FAFAFB] h-full flex flex-col overflow-y-auto overflow-x-hidden z-30 py-8 px-6 hidden lg:flex border-r border-gray-100">
+<aside class="w-[260px] flex-shrink-0 bg-[#FAFAFB] h-full overflow-y-auto overflow-x-hidden z-30 py-8 px-6 hidden lg:flex lg:flex-col border-r border-gray-100">
     @php
         $homeRoute = 'dashboard';
         $viewer = Auth::user();
-        $viewerTenant = $viewer?->tenant()->with('latestCashierSubscription')->first();
+        $viewerTenant = $viewer?->tenant;
+        $viewerTenant?->loadMissing('latestCashierSubscription');
+        $brandLabel = $viewerTenant?->name ?? config('app.name', 'Barbershop SaaS');
+        $tenantName = trim((string) ($viewerTenant?->name ?? ''));
+
+        if ($viewer?->hasRole('Platform Admin')) {
+            $brandLabel = 'ADMIN';
+        } elseif ($viewer?->hasAnyRole(['Barbershop Admin', 'Branch Manager']) && $tenantName !== '') {
+            $brandLabel = str_contains(strtolower($tenantName), 'barbershop')
+                ? $tenantName
+                : $tenantName.' Barbershop';
+        }
+
         $viewerSubscription = $viewerTenant?->latestCashierSubscription;
         $viewerHasActivePlan = ($viewerTenant?->status === 'active')
             && in_array((string) ($viewerSubscription?->stripe_status ?? ''), ['active', 'trialing'], true)
             && (($viewerSubscription?->ends_at ?? null) === null || $viewerSubscription->ends_at->isFuture());
+
+        $dashboardAccess = $viewerTenant?->resolvedDashboardAccessSettings() ?? \App\Models\Tenant::dashboardAccessDefaults();
+        $branchManagerAccess = $dashboardAccess['branch_manager'] ?? [];
+        $canAccessManagerQueue = ! $viewer->hasRole('Branch Manager') || (bool) ($branchManagerAccess['manage_queue'] ?? true);
+        $canAccessManagerBarbers = ! $viewer->hasRole('Branch Manager') || (bool) ($branchManagerAccess['manage_barbers'] ?? true);
+        $canAccessManagerServices = ! $viewer->hasRole('Branch Manager') || (bool) ($branchManagerAccess['manage_services'] ?? true);
+        $canAccessManagerSchedules = ! $viewer->hasRole('Branch Manager') || (bool) ($branchManagerAccess['manage_schedules'] ?? true);
 
         if ($viewer->hasRole('Platform Admin')) {
             $homeRoute = 'admin.dashboard';
@@ -26,8 +45,8 @@
 
     <!-- Logo -->
     <a href="{{ route($homeRoute) }}" class="flex items-center gap-3 mb-10 group">
-        <div class="text-[26px] font-bold text-gray-900 tracking-tight">
-            FiiNeo.io
+        <div class="max-w-[200px] truncate text-[26px] font-bold text-gray-900 tracking-tight" title="{{ $brandLabel }}">
+            {{ $brandLabel }}
         </div>
     </a>
 
@@ -57,20 +76,26 @@
         </a>
 
         @if ($viewer->hasAnyRole(['Barbershop Admin', 'Branch Manager']))
-            <a href="{{ route('manager.queue.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('manager.queue.*') ? $activeClass : '' }}">
-                <svg class="{{ request()->routeIs('manager.queue.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                Queue
-            </a>
+            @if ($canAccessManagerQueue)
+                <a href="{{ route('manager.queue.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('manager.queue.*') ? $activeClass : '' }}">
+                    <svg class="{{ request()->routeIs('manager.queue.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    Queue
+                </a>
+            @endif
 
-            <a href="{{ route('manager.barbers.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('manager.barbers.*') ? $activeClass : '' }}">
-                <svg class="{{ request()->routeIs('manager.barbers.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                Barbers
-            </a>
-            @if ($viewer->hasRole('Branch Manager'))
+            @if ($canAccessManagerBarbers)
+                <a href="{{ route('manager.barbers.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('manager.barbers.*') ? $activeClass : '' }}">
+                    <svg class="{{ request()->routeIs('manager.barbers.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                    Barbers
+                </a>
+            @endif
+            @if ($canAccessManagerServices)
                 <a href="{{ route('manager.services.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('manager.services.*') ? $activeClass : '' }}">
                     <svg class="{{ request()->routeIs('manager.services.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6"></path></svg>
                     Services
                 </a>
+            @endif
+            @if ($viewer->hasRole('Branch Manager') && $canAccessManagerSchedules)
                 <a href="{{ route('manager.schedules.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('manager.schedules.*') ? $activeClass : '' }}">
                     <svg class="{{ request()->routeIs('manager.schedules.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     Schedules
@@ -80,12 +105,6 @@
                 <a href="{{ route('manager.branches.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('manager.branches.*') ? $activeClass : '' }}">
                     <svg class="{{ request()->routeIs('manager.branches.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V10l7-7 7 7v11M9 21v-6h6v6"></path></svg>
                     Branches
-                </a>
-            @endif
-            @if ($viewer->hasRole('Barbershop Admin'))
-                <a href="{{ route('customer.dashboard') }}" target="_blank" class="{{ $navItemClass }}">
-                    <svg class="{{ $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                    Customer View
                 </a>
             @endif
             <a href="{{ route('profile.edit') }}" class="{{ $navItemClass }}">
@@ -107,10 +126,10 @@
                 Admin
             </a>
         @endif
-        
+
         @if ($viewer->hasRole('Customer'))
-            <a href="{{ route('booking.index') }}" class="{{ $navItemClass }} {{ request()->routeIs('booking.*') ? $activeClass : '' }}">
-                <svg class="{{ request()->routeIs('booking.*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <a href="{{ route('customer.bookings') }}" class="{{ $navItemClass }} {{ request()->routeIs('customer.book*') ? $activeClass : '' }}">
+                <svg class="{{ request()->routeIs('customer.book*') ? $activeIconClass : $iconClass }}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                 Book Now
             </a>
         @endif
@@ -130,5 +149,21 @@
                 Log out
             </button>
         </form>
+
+        @php
+            $systemVersion = app(\App\Support\SystemVersion::class)->resolve();
+            $versionMeta = collect([
+                $systemVersion['status'] ?? null,
+                $systemVersion['branch'] ?? null,
+                $systemVersion['short_commit'] ?? null,
+            ])->filter(fn ($value) => filled($value))->implode(' · ');
+        @endphp
+
+        <div class="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2" title="Fetched from repository metadata or APP_VERSION configuration.">
+            <p class="text-[11px] font-semibold text-gray-600">System {{ $systemVersion['display_version'] ?? 'vdev' }}</p>
+            @if ($versionMeta !== '')
+                <p class="mt-0.5 text-[10px] text-gray-400 uppercase tracking-wide">{{ $versionMeta }}</p>
+            @endif
+        </div>
     </div>
 </aside>

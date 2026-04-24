@@ -14,10 +14,18 @@ class ProfileController extends Controller
 
     public function update(Request $request)
     {
+        $tenantId = (string) (auth()->user()?->tenant_id ?? '');
+
         $validated = $request->validate([
             'name'  => ['required', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:20'],
-            'email' => ['required', 'email', Rule::unique('users')->ignore(auth()->id())],
+            'email' => [
+                'required',
+                'email',
+                Rule::unique('users', 'email')
+                    ->where(fn ($query) => $query->where('tenant_id', $tenantId))
+                    ->ignore(auth()->id()),
+            ],
         ]);
 
         auth()->user()->update($validated);

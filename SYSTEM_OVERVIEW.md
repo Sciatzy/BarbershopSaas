@@ -348,7 +348,7 @@ Shared password:
 1. password123
 
 Accounts:
-1. Platform Admin: platformadmin@barbershop.test
+1. Platform Admin: admin@platform.com 
 2. Barbershop Admin: manager@barbershop.test
 3. Branch Manager: branchmanager@barbershop.test
 4. Barber: barber@barbershop.test
@@ -403,3 +403,7 @@ This section summarizes important post-pull merge-hardening changes already inte
 Validated outcomes:
 1. Edited controllers/routes lint clean.
 2. Booking guard feature tests passed (2/2).
+
+
+#start application 
+Composer dev

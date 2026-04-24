@@ -1,38 +1,80 @@
+@php
+    $resolvedTenant = $tenant ?? auth()->user()?->tenant ?? request()->attributes->get('currentTenant');
+
+    $theme = (string) ($resolvedTenant?->customer_theme ?? 'dark');
+    $theme = in_array($theme, ['dark', 'light'], true) ? $theme : 'dark';
+    $isLightTheme = $theme === 'light';
+
+    $fontChoice = (string) ($resolvedTenant?->customer_font ?? 'dm_sans');
+    $fontMap = [
+        'dm_sans' => [
+            'body' => "'DM Sans', sans-serif",
+            'display' => "'Bebas Neue', sans-serif",
+        ],
+        'poppins' => [
+            'body' => "'Poppins', sans-serif",
+            'display' => "'Poppins', sans-serif",
+        ],
+        'space_grotesk' => [
+            'body' => "'Space Grotesk', sans-serif",
+            'display' => "'Space Grotesk', sans-serif",
+        ],
+        'lora' => [
+            'body' => "'Lora', serif",
+            'display' => "'Lora', serif",
+        ],
+    ];
+    $activeFont = $fontMap[$fontChoice] ?? $fontMap['dm_sans'];
+
+    $buttonStyle = (string) ($resolvedTenant?->customer_button_style ?? 'rounded');
+    $buttonStyle = in_array($buttonStyle, ['rounded', 'pill', 'sharp'], true) ? $buttonStyle : 'rounded';
+    $buttonRadius = match ($buttonStyle) {
+        'pill' => '999px',
+        'sharp' => '4px',
+        default => '10px',
+    };
+
+    $logoUrl = ! empty($resolvedTenant?->logo_path)
+        ? asset('storage/'.$resolvedTenant?->logo_path)
+        : null;
+@endphp
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Customer Dashboard - {{ $tenant->name ?? config('app.name', 'Barbershop SaaS') }}</title>
+    <title>Customer Dashboard - {{ $resolvedTenant?->name ?? config('app.name', 'Barbershop SaaS') }}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&family=Poppins:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            --ink:          #0D1117;
-            --surface:      #161B22;
-            --surface-2:    #1C2330;
-            --surface-3:    #222B3A;
-            --border:       rgba(255,255,255,0.07);
-            --border-strong:rgba(255,255,255,0.13);
+            --ink:          {{ $isLightTheme ? '#F4F7FB' : '#0D1117' }};
+            --surface:      {{ $isLightTheme ? '#FFFFFF' : '#161B22' }};
+            --surface-2:    {{ $isLightTheme ? '#F8FAFD' : '#1C2330' }};
+            --surface-3:    {{ $isLightTheme ? '#EEF2F8' : '#222B3A' }};
+            --border:       {{ $isLightTheme ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.07)' }};
+            --border-strong:{{ $isLightTheme ? 'rgba(15,23,42,0.16)' : 'rgba(255,255,255,0.13)' }};
 
             /* The tenant's custom primary / secondary branding colors logic injected here */
-            --gold:         {{ $tenant->brand_color ?? '#C9A84C' }};
-            --rust:         {{ $tenant->brand_color_secondary ?? '#B54B2A' }};
+            --gold:         {{ $resolvedTenant?->brand_color ?? '#C9A84C' }};
+            --rust:         {{ $resolvedTenant?->brand_color_secondary ?? '#B54B2A' }};
 
-            --cream:        #F5EFE0;
-            --muted:        #8B9AAD;
+            --cream:        {{ $isLightTheme ? '#0F172A' : '#F5EFE0' }};
+            --muted:        {{ $isLightTheme ? '#5B6981' : '#8B9AAD' }};
 
             --green:        #28C76F;
             --green-dim:    rgba(40,199,111,0.12);
             --radius:       10px;
             --radius-lg:    16px;
             --radius-xl:    22px;
-            --font-display: 'Bebas Neue', sans-serif;
-            --font-body:    'DM Sans', sans-serif;
+            --font-display: {{ $activeFont['display'] }};
+            --font-body:    {{ $activeFont['body'] }};
             --font-mono:    'DM Mono', monospace;
+            --btn-radius:   {{ $buttonRadius }};
         }
 
         /* Inject CSS hex to RGB conversion variables to support opacity if needed,
@@ -71,11 +113,23 @@
 
         .sidebar-brand {
             padding: 0 24px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
             font-family: var(--font-display);
             font-size: 28px;
             letter-spacing: 1px;
             border-bottom: 1px solid var(--border);
             margin-bottom: 24px;
+        }
+
+        .sidebar-logo {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            object-fit: cover;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
         }
 
         .sidebar-user {
@@ -214,8 +268,16 @@
 
         .btn {
             display: inline-flex; align-items: center; justify-content: center;
-            padding: 12px 24px; border-radius: var(--radius); font-weight: 500; font-size: 15px;
+            padding: 12px 24px; border-radius: var(--btn-radius); font-weight: 500; font-size: 15px;
             cursor: pointer; border: none; font-family: var(--font-body);
+        }
+
+        .main-content button,
+        .main-content input[type='submit'],
+        .main-content input[type='button'],
+        .main-content .tenant-btn,
+        .main-content a.tenant-btn {
+            border-radius: var(--btn-radius) !important;
         }
 
         .btn-rust { background: var(--rust); color: var(--cream); }
@@ -242,7 +304,10 @@
     <!-- Sidebar -->
     <aside class="layout-sidebar" id="sidebar">
         <div class="sidebar-brand">
-            {{ $tenant->name ?? 'Barber SaaS' }}
+            @if ($logoUrl)
+                <img src="{{ $logoUrl }}" alt="{{ $resolvedTenant?->name ?? 'Shop' }} logo" class="sidebar-logo">
+            @endif
+            <span>{{ $resolvedTenant?->name ?? 'Barber SaaS' }}</span>
         </div>
 
         <div class="sidebar-user">
@@ -256,8 +321,8 @@
             <div class="nav-indicator" id="nav-indicator"></div>
             <a href="{{ route('customer.dashboard') }}" class="nav-item {{ request()->routeIs('customer.dashboard') ? 'active' : '' }}">Dashboard</a>
             @if ($isCustomerUser)
-                <a href="{{ route('customer.services') }}" class="nav-item {{ request()->routeIs('customer.services') ? 'active' : '' }}">Book a Service</a>
-                <a href="{{ route('customer.bookings') }}" class="nav-item {{ request()->routeIs('customer.bookings') ? 'active' : '' }}">My Bookings</a>
+                <a href="{{ route('customer.services') }}" class="nav-item {{ request()->routeIs('customer.services') || request()->routeIs('customer.book*') ? 'active' : '' }}">Book a Service</a>
+                <a href="{{ route('customer.bookings') }}" class="nav-item {{ request()->routeIs('customer.bookings*') ? 'active' : '' }}">My Bookings</a>
                 <a href="{{ route('customer.points') }}" class="nav-item {{ request()->routeIs('customer.points') ? 'active' : '' }}">Points & Rewards</a>
                 <a href="{{ route('customer.profile') }}" class="nav-item {{ request()->routeIs('customer.profile') ? 'active' : '' }}">Profile</a>
             @else
@@ -303,10 +368,10 @@
             <span class="bn-icon">⌂</span><span class="bn-label">Home</span>
         </a>
         @if ($isCustomerUser)
-            <a href="{{ route('customer.services') }}" class="{{ request()->routeIs('customer.services') ? 'active' : '' }}">
+            <a href="{{ route('customer.services') }}" class="{{ request()->routeIs('customer.services') || request()->routeIs('customer.book*') ? 'active' : '' }}">
                 <span class="bn-icon">✂</span><span class="bn-label">Book</span>
             </a>
-            <a href="{{ route('customer.bookings') }}" class="{{ request()->routeIs('customer.bookings') ? 'active' : '' }}">
+            <a href="{{ route('customer.bookings') }}" class="{{ request()->routeIs('customer.bookings*') ? 'active' : '' }}">
                 <span class="bn-icon">☰</span><span class="bn-label">History</span>
             </a>
             <a href="{{ route('customer.points') }}" class="{{ request()->routeIs('customer.points') ? 'active' : '' }}">

@@ -24,6 +24,7 @@ class LandingController extends Controller
                 ->withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)
                 ->where('is_active', true)
+                ->whereNull('archived_at')
                 ->orderBy('name')
                 ->get();
 

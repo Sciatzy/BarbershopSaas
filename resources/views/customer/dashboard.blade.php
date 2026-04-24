@@ -3,12 +3,16 @@
 @section('content')
 @php
     $isCustomerUser = auth()->user()->hasRole('Customer');
+    $resolvedTenant = $tenant ?? auth()->user()?->tenant ?? request()->attributes->get('currentTenant');
+    $heroImageUrl = ! empty($resolvedTenant?->hero_image_path)
+        ? asset('storage/'.$resolvedTenant?->hero_image_path)
+        : null;
 @endphp
-<div class="welcome-strip">
+<div class="welcome-strip" style="{{ $heroImageUrl ? 'background-image:linear-gradient(rgba(13,17,23,0.72), rgba(13,17,23,0.72)), url('.$heroImageUrl.'); background-size:cover; background-position:center; border:1px solid var(--border); border-radius:var(--radius-lg); padding:24px;' : '' }}">
     <h1 class="page-title">
         Good {{ now()->format('A') === 'AM' ? 'morning' : 'afternoon' }}, {{ Str::before(auth()->user()->name, ' ') }}!
     </h1>
-    <p class="page-subtitle">Here's what's happening at {{ $tenant->name ?? 'the shop' }}.</p>
+    <p class="page-subtitle">Here's what's happening at {{ $resolvedTenant?->name ?? 'the shop' }}.</p>
     @if (! $isCustomerUser)
         <p style="color:var(--gold); font-size:13px; margin-top:-20px; margin-bottom:24px;">Preview mode: customer actions are read-only for admin users.</p>
     @endif
@@ -56,14 +60,14 @@
         </div>
     </div>
     @if ($isCustomerUser)
-        <a href="{{ route('customer.bookings') }}" class="btn" style="background:transparent; border:1px solid var(--gold); color:var(--gold); padding:8px 16px; font-size:13px;">View Details →</a>
+        <a href="{{ route('customer.bookings') }}" class="btn tenant-btn" style="background:transparent; border:1px solid var(--gold); color:var(--gold); padding:8px 16px; font-size:13px;">View Details →</a>
     @endif
 </div>
 @endif
 
 <div class="services-section" style="margin-bottom: 40px;">
     <h2 style="font-family:var(--font-display); font-size:32px; margin-bottom:4px;">BOOK A SERVICE</h2>
-    <p style="color:var(--muted); font-size:14px; margin-bottom:24px;">Choose from {{ $tenant->name ?? 'the shop' }}'s menu</p>
+    <p style="color:var(--muted); font-size:14px; margin-bottom:24px;">Choose from {{ $resolvedTenant?->name ?? 'the shop' }}'s menu</p>
 
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
         @forelse($services as $index => $service)

@@ -54,6 +54,7 @@ class WalkInWorkController extends Controller
 
         Service::query()->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
             ->findOrFail($validated['service_id']);
 
         $walkInCustomer = User::query()->firstOrCreate(

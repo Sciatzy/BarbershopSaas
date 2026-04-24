@@ -46,6 +46,7 @@ class BookingController extends Controller
         $services = Service::query()
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
             ->orderBy('name')
             ->get(['id', 'name', 'type', 'price', 'duration_minutes']);
 
@@ -104,7 +105,11 @@ class BookingController extends Controller
         ]);
 
         $branch = Branch::query()->withoutGlobalScopes()->where('tenant_id', $tenantId)->findOrFail($validated['branch_id']);
-        Service::query()->withoutGlobalScopes()->where('tenant_id', $tenantId)->findOrFail($validated['service_id']);
+        Service::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->findOrFail($validated['service_id']);
         User::query()
             ->withoutGlobalScopes()
             ->role('Barber')
@@ -123,7 +128,7 @@ class BookingController extends Controller
         $appointment->customer_id = $user->id;
         $appointment->barber_id = $validated['barber_id'];
         $appointment->service_id = $validated['service_id'];
-        $appointment->appointment_datetime = $appointmentDateTime->toDateTimeString();
+        $appointment->appointment_datetime = $appointmentDateTime;
         $appointment->source = 'online';
         $appointment->status = 'pending';
         $appointment->is_on_time = false;

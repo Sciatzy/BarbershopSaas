@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 use App\Models\Tenant;
 
 class ManagerSetupController extends Controller
@@ -52,6 +53,11 @@ class ManagerSetupController extends Controller
             ],
             'brand_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'brand_color_secondary' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'customer_theme' => ['nullable', Rule::in(['dark', 'light'])],
+            'customer_font' => ['nullable', Rule::in(['dm_sans', 'poppins', 'space_grotesk', 'lora'])],
+            'customer_button_style' => ['nullable', Rule::in(['rounded', 'pill', 'sharp'])],
+            'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
+            'hero_image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:4096'],
         ]);
 
         $tenant = Tenant::findOrFail($tenantId);
@@ -63,11 +69,35 @@ class ManagerSetupController extends Controller
             $domainPathToSave = strtolower($request->custom_domain);
         }
 
+        $logoPath = $tenant->logo_path;
+        $heroImagePath = $tenant->hero_image_path;
+
+        if ($request->hasFile('logo')) {
+            if (! empty($logoPath)) {
+                Storage::disk('public')->delete($logoPath);
+            }
+
+            $logoPath = $request->file('logo')->store('tenants/'.$tenant->id.'/branding', 'public');
+        }
+
+        if ($request->hasFile('hero_image')) {
+            if (! empty($heroImagePath)) {
+                Storage::disk('public')->delete($heroImagePath);
+            }
+
+            $heroImagePath = $request->file('hero_image')->store('tenants/'.$tenant->id.'/branding', 'public');
+        }
+
         $tenant->update([
             'name' => $request->tenant_name,
             'primary_domain' => $domainPathToSave,
             'brand_color' => $request->input('brand_color') ?: '#C9A84C',
             'brand_color_secondary' => $request->input('brand_color_secondary') ?: '#B54B2A',
+            'customer_theme' => $request->input('customer_theme') ?: 'dark',
+            'customer_font' => $request->input('customer_font') ?: 'dm_sans',
+            'customer_button_style' => $request->input('customer_button_style') ?: 'rounded',
+            'logo_path' => $logoPath,
+            'hero_image_path' => $heroImagePath,
         ]);
 
         if ($request->session()->has('pending_setup_plan')) {

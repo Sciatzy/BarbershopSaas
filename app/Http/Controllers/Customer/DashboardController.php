@@ -103,6 +103,7 @@ class DashboardController extends Controller
 
         $services = Service::where('tenant_id', $tenantId !== '' ? $tenantId : null)
             ->where('is_active', true)
+            ->whereNull('archived_at')
             ->take(4)
             ->get();
 

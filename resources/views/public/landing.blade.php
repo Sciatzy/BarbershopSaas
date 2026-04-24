@@ -8,27 +8,47 @@
         <link href="https://fonts.bunny.net/css?family=poppins:300,400,500,600,700,800&display=swap" rel="stylesheet" />
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="font-sans text-gray-900 antialiased bg-gray-50 selection:bg-barber-accent selection:text-white">
+    @php
+        $landingTheme = (string) ($tenant?->customer_theme ?? 'dark');
+        $isLightTheme = $landingTheme === 'light';
+        $primaryColor = $tenant?->brand_color ?? '#C9A84C';
+        $secondaryColor = $tenant?->brand_color_secondary ?? '#B54B2A';
+        $logoUrl = !empty($tenant?->logo_path) ? asset('storage/'.$tenant->logo_path) : null;
+        $heroImageUrl = !empty($tenant?->hero_image_path) ? asset('storage/'.$tenant->hero_image_path) : null;
+        $buttonStyle = (string) ($tenant?->customer_button_style ?? 'rounded');
+        $buttonRadius = match ($buttonStyle) {
+            'pill' => '999px',
+            'sharp' => '4px',
+            default => '10px',
+        };
+    @endphp
+    <body class="font-sans {{ $isLightTheme ? 'text-slate-900 bg-slate-50' : 'text-slate-100 bg-slate-900' }} antialiased selection:text-white" style="--primary:{{ $primaryColor }}; --secondary:{{ $secondaryColor }}; --btn-radius:{{ $buttonRadius }}; selection-background-color:var(--primary);">
         <nav class="bg-white border-b border-gray-100">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex justify-between items-center h-16">
-                    <h1 class="text-xl font-bold text-gray-900">{{ $tenant->name ?? 'Our Barbershop' }}</h1>
+                    <h1 class="text-xl font-bold text-gray-900 flex items-center gap-3">
+                        @if ($logoUrl)
+                            <img src="{{ $logoUrl }}" alt="{{ $tenant->name ?? 'Shop' }} logo" class="h-9 w-9 rounded-md object-cover border border-gray-200 bg-white p-0.5">
+                        @endif
+                        <span>{{ $tenant->name ?? 'Our Barbershop' }}</span>
+                    </h1>
                     <div class="flex items-center gap-4 text-sm">
                         <a href="#services" class="text-gray-600 hover:text-gray-900">Services</a>
                         <a href="#barbers" class="text-gray-600 hover:text-gray-900">Barbers</a>
-                        <a href="{{ auth()->check() ? route('booking.create') : route('login') }}" class="px-4 py-2 rounded-md bg-gray-900 text-white hover:bg-gray-800">Reserve My Spot</a>
+                        <a href="{{ auth()->check() ? route('customer.bookings.create') : route('login') }}" class="px-4 py-2 text-white" style="border-radius:var(--btn-radius); background:var(--secondary);">Reserve My Spot</a>
                     </div>
                 </div>
             </div>
         </nav>
 
-        <section class="py-16 bg-gradient-to-br from-barber-dark to-slate-900 text-white">
+        <section class="py-16 text-white" style="background:
+            {{ $heroImageUrl ? "linear-gradient(rgba(10,15,24,0.68), rgba(10,15,24,0.68)), url('".$heroImageUrl."') center/cover no-repeat" : 'linear-gradient(135deg, '.$primaryColor.', '.$secondaryColor.')' }};">
             <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                 <p class="text-sm uppercase tracking-[0.2em] text-white/70">Welcome to</p>
                 <h2 class="text-4xl md:text-6xl font-extrabold mt-3">{{ $tenant->name ?? 'Our Barbershop' }}</h2>
                 <p class="mt-5 text-white/80 text-lg">Book your next cut in minutes and keep your style sharp.</p>
                 <div class="mt-8">
-                    <a href="#reserve" class="inline-flex items-center px-6 py-3 rounded-full bg-white text-gray-900 font-semibold hover:bg-gray-100">
+                    <a href="#reserve" class="inline-flex items-center px-6 py-3 bg-white text-gray-900 font-semibold" style="border-radius:var(--btn-radius);">
                         Reserve My Spot
                     </a>
                 </div>
@@ -86,7 +106,7 @@
                     <h3 class="text-xl font-bold text-gray-900">Reserve My Spot</h3>
                     <p class="text-sm text-gray-600 mt-1">Pick your service and confirm your visit.</p>
 
-                    <form id="reserve-form" method="POST" action="{{ route('booking.store') }}" class="space-y-4 mt-5">
+                    <form id="reserve-form" method="POST" action="{{ route('customer.book.store') }}" class="space-y-4 mt-5">
                         @csrf
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1" for="service_id">Service</label>
@@ -109,7 +129,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1" for="notes">Notes</label>
                             <textarea id="notes" name="notes" rows="3" maxlength="300" class="w-full border-gray-300 rounded-md shadow-sm" placeholder="Optional request"></textarea>
                         </div>
-                        <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-900 text-white rounded-md text-sm hover:bg-gray-800">Reserve My Spot</button>
+                        <button type="submit" class="inline-flex items-center px-4 py-2 text-white text-sm" style="background:var(--secondary); border-radius:var(--btn-radius);">Reserve My Spot</button>
                     </form>
                 </div>
             </div>

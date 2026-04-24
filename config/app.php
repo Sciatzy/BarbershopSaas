@@ -17,6 +17,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Version Metadata
+    |--------------------------------------------------------------------------
+    |
+    | APP_VERSION can be set during deployment (for example, v1.2.0). When not
+    | provided, the system falls back to repository metadata.
+    |
+    */
+
+    'version' => env('APP_VERSION', ''),
+    'version_status' => env('APP_VERSION_STATUS', ''),
+    'version_sync_remote' => env('APP_VERSION_SYNC_REMOTE', 'origin'),
+    'version_sync_branch' => env('APP_VERSION_SYNC_BRANCH', 'main'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

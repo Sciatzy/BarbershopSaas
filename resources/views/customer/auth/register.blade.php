@@ -10,15 +10,20 @@
     @csrf
 
     <div class="form-group">
-        <label for="tenant_id" class="form-label">Shop (Select Barbershop)</label>
-        <select id="tenant_id" name="tenant_id" class="form-input" required autofocus>
-            <option value="" disabled selected>-- Choose a Barbershop --</option>
-            @foreach($tenants as $tenant)
-                <option value="{{ $tenant->id }}" {{ old('tenant_id') == $tenant->id ? 'selected' : '' }}>
-                    {{ $tenant->name }}
-                </option>
-            @endforeach
-        </select>
+        <label for="tenant_id" class="form-label">Shop (Barbershop)</label>
+        @if (!empty($lockedTenant))
+            <input type="text" class="form-input" value="{{ $lockedTenant->name }}" disabled>
+            <input id="tenant_id" type="hidden" name="tenant_id" value="{{ $lockedTenant->id }}">
+        @else
+            <select id="tenant_id" name="tenant_id" class="form-input" required autofocus>
+                <option value="" disabled selected>-- Choose a Barbershop --</option>
+                @foreach($tenants as $tenant)
+                    <option value="{{ $tenant->id }}" {{ old('tenant_id') == $tenant->id ? 'selected' : '' }}>
+                        {{ $tenant->name }}
+                    </option>
+                @endforeach
+            </select>
+        @endif
         @error('tenant_id') <span class="error-message">{{ $message }}</span> @enderror
     </div>
 

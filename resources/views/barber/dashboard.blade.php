@@ -143,7 +143,7 @@
                                             {{ $appointment->status }}
                                         </span>
 
-                                        @if (in_array(strtolower((string) $appointment->status), ['queued', 'in_progress'], true))
+                                        @if (($canUpdateAppointmentStatus ?? true) && in_array(strtolower((string) $appointment->status), ['queued', 'in_progress'], true))
                                             <div class="mt-2 flex gap-2">
                                                 @if (strtolower((string) $appointment->status) === 'queued')
                                                     <form method="POST" action="{{ route('barber.appointments.status', $appointment->id) }}">
@@ -165,6 +165,8 @@
                                                     </form>
                                                 @endif
                                             </div>
+                                        @elseif (! ($canUpdateAppointmentStatus ?? true) && in_array(strtolower((string) $appointment->status), ['queued', 'in_progress'], true))
+                                            <p class="mt-2 text-xs text-slate-400">Status updates are disabled by the shop owner.</p>
                                         @endif
                                     </div>
                                 </li>

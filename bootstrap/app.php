@@ -25,6 +25,7 @@ spl_autoload_register(static function (string $class): void {
 });
 
 use App\Http\Middleware\TenantScopeMiddleware;
+use App\Http\Middleware\EnsureDashboardFeatureAccess;
 use App\Http\Middleware\EnsureTenantHasActivePlan;
 use App\Http\Middleware\ResolveTenantFromDomain;
 use App\Http\Middleware\SwitchTenantDatabase;
@@ -47,6 +48,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
             'active_plan' => EnsureTenantHasActivePlan::class,
+            'dashboard_access' => EnsureDashboardFeatureAccess::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [
