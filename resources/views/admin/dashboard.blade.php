@@ -203,7 +203,41 @@
                     $ticketStatusOptions = ['open' => 'Open', 'in_progress' => 'In Progress', 'resolved' => 'Resolved', 'closed' => 'Closed'];
                     $ticketPriorityOptions = ['low' => 'Low', 'medium' => 'Medium', 'high' => 'High', 'urgent' => 'Urgent'];
                     $ticketCategoryOptions = ['general' => 'General', 'bug' => 'Bug', 'billing' => 'Billing', 'performance' => 'Performance', 'security' => 'Security', 'feature_request' => 'Feature Request', 'other' => 'Other'];
+                    $ticketStatusClasses = [
+                        'open' => 'bg-amber-100 text-amber-700',
+                        'in_progress' => 'bg-blue-100 text-blue-700',
+                        'resolved' => 'bg-emerald-100 text-emerald-700',
+                        'closed' => 'bg-slate-200 text-slate-700',
+                    ];
+                    $ticketPriorityClasses = [
+                        'low' => 'bg-slate-100 text-slate-700',
+                        'medium' => 'bg-indigo-100 text-indigo-700',
+                        'high' => 'bg-orange-100 text-orange-700',
+                        'urgent' => 'bg-red-100 text-red-700',
+                    ];
+                    $supportTicketCollection = method_exists($supportTickets, 'getCollection')
+                        ? $supportTickets->getCollection()
+                        : collect($supportTickets);
                 @endphp
+
+                <div class="p-6 grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Open</p>
+                        <p class="mt-1 text-xl font-semibold text-slate-800">{{ $supportTicketCollection->where('status', 'open')->count() }}</p>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">In Progress</p>
+                        <p class="mt-1 text-xl font-semibold text-slate-800">{{ $supportTicketCollection->where('status', 'in_progress')->count() }}</p>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Resolved</p>
+                        <p class="mt-1 text-xl font-semibold text-slate-800">{{ $supportTicketCollection->where('status', 'resolved')->count() }}</p>
+                    </div>
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Urgent</p>
+                        <p class="mt-1 text-xl font-semibold text-slate-800">{{ $supportTicketCollection->where('priority', 'urgent')->count() }}</p>
+                    </div>
+                </div>
 
                 <div class="p-6 border-b border-slate-100 bg-slate-50">
                     <form method="GET" action="{{ route('admin.dashboard') }}" class="grid grid-cols-1 gap-3 lg:grid-cols-5">
@@ -237,73 +271,86 @@
                     </form>
                 </div>
 
-                <div class="p-6 space-y-4">
+                <div class="p-6 space-y-3">
                     @forelse ($supportTickets as $ticket)
-                        <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                <div>
-                                    <p class="text-sm font-semibold text-slate-900">{{ $ticket->ticket_number }} · {{ $ticket->subject }}</p>
-                                    <p class="mt-1 text-xs text-slate-500">
-                                        Tenant: {{ $ticket->tenant?->name ?? $ticket->tenant_id }}
-                                        · Owner: {{ $ticket->owner?->name ?? 'Unknown' }}
-                                        · Category: {{ ucfirst($ticket->category) }}
-                                        · Priority: {{ ucfirst($ticket->priority) }}
-                                        · Updated: {{ optional($ticket->latest_reply_at)->diffForHumans() ?? 'n/a' }}
-                                    </p>
-                                </div>
+                        @php
+                            $statusClass = $ticketStatusClasses[$ticket->status] ?? 'bg-slate-100 text-slate-700';
+                            $priorityClass = $ticketPriorityClasses[$ticket->priority] ?? 'bg-slate-100 text-slate-700';
+                        @endphp
+                        <details class="group rounded-xl border border-slate-200 bg-white">
+                            <summary class="list-none cursor-pointer p-4">
+                                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm font-semibold text-slate-900">{{ $ticket->ticket_number }} · {{ $ticket->subject }}</p>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            Tenant: {{ $ticket->tenant?->name ?? $ticket->tenant_id }}
+                                            · Owner: {{ $ticket->owner?->name ?? 'Unknown' }}
+                                            · Category: {{ ucfirst($ticket->category) }}
+                                            · Updated: {{ optional($ticket->latest_reply_at)->diffForHumans() ?? 'n/a' }}
+                                        </p>
+                                    </div>
 
-                                <form method="POST" action="{{ route('admin.support-tickets.status', ['ticket' => $ticket->id]) }}" class="flex gap-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $statusClass }}">{{ strtoupper(str_replace('_', ' ', $ticket->status)) }}</span>
+                                        <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $priorityClass }}">{{ strtoupper($ticket->priority) }}</span>
+                                        <span class="text-xs font-semibold text-slate-500">Open Thread</span>
+                                    </div>
+                                </div>
+                            </summary>
+
+                            <div class="space-y-4 border-t border-slate-100 bg-slate-50 p-4">
+                                <form method="POST" action="{{ route('admin.support-tickets.status', ['ticket' => $ticket->id]) }}" class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                                     @csrf
                                     @method('PATCH')
-                                    <select name="status" class="rounded-md border-slate-200 bg-slate-50 text-sm">
+                                    <select name="status" class="rounded-md border-slate-200 bg-white text-sm">
                                         @foreach ($ticketStatusOptions as $value => $label)
                                             <option value="{{ $value }}" @selected($ticket->status === $value)>{{ $label }}</option>
                                         @endforeach
                                     </select>
-                                    <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Update</button>
+                                    <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Update Status</button>
                                 </form>
-                            </div>
 
-                            <div class="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-3">
-                                @forelse ($ticket->messages as $message)
-                                    <div class="rounded-md border border-slate-200 bg-white p-3">
-                                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            {{ str_replace('_', ' ', $message->sender_role) }}
-                                            @if ($message->sender?->name)
-                                                · {{ $message->sender->name }}
+                                <div class="max-h-80 space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3">
+                                    @forelse ($ticket->messages as $message)
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                {{ str_replace('_', ' ', $message->sender_role) }}
+                                                @if ($message->sender?->name)
+                                                    · {{ $message->sender->name }}
+                                                @endif
+                                                · {{ $message->created_at?->toDateTimeString() }}
+                                            </p>
+                                            <p class="mt-1 whitespace-pre-line text-sm text-slate-700">{{ $message->message }}</p>
+
+                                            @if ($message->hasAttachment())
+                                                <a href="{{ $message->attachmentUrl() }}" target="_blank" rel="noopener" class="mt-2 inline-flex text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                                    Attachment: {{ $message->attachment_original_name ?: 'Download file' }}
+                                                </a>
                                             @endif
-                                            · {{ $message->created_at?->toDateTimeString() }}
-                                        </p>
-                                        <p class="mt-1 whitespace-pre-line text-sm text-slate-700">{{ $message->message }}</p>
-
-                                        @if ($message->hasAttachment())
-                                            <a href="{{ $message->attachmentUrl() }}" target="_blank" rel="noopener" class="mt-2 inline-flex text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                                                Attachment: {{ $message->attachment_original_name ?: 'Download file' }}
-                                            </a>
-                                        @endif
-                                    </div>
-                                @empty
-                                    <p class="text-sm text-slate-500">No messages yet.</p>
-                                @endforelse
-                            </div>
-
-                            <form method="POST" action="{{ route('admin.support-tickets.reply', ['ticket' => $ticket->id]) }}" enctype="multipart/form-data" class="space-y-3">
-                                @csrf
-                                <textarea name="message" rows="3" required class="w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Reply to tenant owner"></textarea>
-
-                                <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                                    <select name="status" class="rounded-md border-slate-200 bg-slate-50 text-sm">
-                                        @foreach ($ticketStatusOptions as $value => $label)
-                                            <option value="{{ $value }}" @selected($ticket->status === $value)>{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-
-                                    <input type="file" name="attachment" class="w-full rounded-md border-slate-200 bg-white text-sm" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx">
+                                        </div>
+                                    @empty
+                                        <p class="text-sm text-slate-500">No messages yet.</p>
+                                    @endforelse
                                 </div>
 
-                                <button type="submit" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Send Reply</button>
-                            </form>
-                        </div>
+                                <form method="POST" action="{{ route('admin.support-tickets.reply', ['ticket' => $ticket->id]) }}" enctype="multipart/form-data" class="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                                    @csrf
+                                    <textarea name="message" rows="3" required class="w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Reply to tenant owner"></textarea>
+
+                                    <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                        <select name="status" class="rounded-md border-slate-200 bg-slate-50 text-sm">
+                                            @foreach ($ticketStatusOptions as $value => $label)
+                                                <option value="{{ $value }}" @selected($ticket->status === $value)>{{ $label }}</option>
+                                            @endforeach
+                                        </select>
+
+                                        <input type="file" name="attachment" class="w-full rounded-md border-slate-200 bg-white text-sm" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx">
+                                    </div>
+
+                                    <button type="submit" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Send Reply</button>
+                                </form>
+                            </div>
+                        </details>
                     @empty
                         <p class="text-sm text-slate-500">No support tickets found for the current filter.</p>
                     @endforelse

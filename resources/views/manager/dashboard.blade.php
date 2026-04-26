@@ -338,48 +338,72 @@
                         <p class="text-sm text-slate-500 mt-1">Open a support ticket with the central team and track the full reply thread.</p>
                     </div>
 
-                    <div class="p-6 space-y-4">
+                    @php
+                        $managerTicketStatusClasses = [
+                            'open' => 'bg-amber-100 text-amber-700',
+                            'in_progress' => 'bg-blue-100 text-blue-700',
+                            'resolved' => 'bg-emerald-100 text-emerald-700',
+                            'closed' => 'bg-slate-200 text-slate-700',
+                        ];
+                        $managerTicketPriorityClasses = [
+                            'low' => 'bg-slate-100 text-slate-700',
+                            'medium' => 'bg-indigo-100 text-indigo-700',
+                            'high' => 'bg-orange-100 text-orange-700',
+                            'urgent' => 'bg-red-100 text-red-700',
+                        ];
+                    @endphp
+
+                    <div class="p-6 space-y-3">
                         @if ($canManageBilling)
-                            <form method="POST" action="{{ route('manager.support-tickets.store') }}" enctype="multipart/form-data" class="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-2">
-                                @csrf
+                            <details class="group rounded-xl border border-slate-200 bg-slate-50 p-4" open>
+                                <summary class="list-none cursor-pointer">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <p class="text-sm font-semibold text-slate-900">Create New Support Ticket</p>
+                                        <span class="text-xs font-semibold text-slate-500">Expand / Collapse</span>
+                                    </div>
+                                </summary>
 
-                                <div class="lg:col-span-2">
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</label>
-                                    <input type="text" name="subject" required maxlength="160" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm" placeholder="Short summary of your issue">
-                                </div>
+                                <form method="POST" action="{{ route('manager.support-tickets.store') }}" enctype="multipart/form-data" class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                    @csrf
 
-                                <div>
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Category</label>
-                                    <select name="category" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm">
-                                        @foreach (['general', 'bug', 'billing', 'performance', 'security', 'feature_request', 'other'] as $category)
-                                            <option value="{{ $category }}">{{ ucfirst(str_replace('_', ' ', $category)) }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
+                                    <div class="lg:col-span-2">
+                                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</label>
+                                        <input type="text" name="subject" required maxlength="160" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm" placeholder="Short summary of your issue">
+                                    </div>
 
-                                <div>
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Priority</label>
-                                    <select name="priority" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm">
-                                        @foreach (['low', 'medium', 'high', 'urgent'] as $priority)
-                                            <option value="{{ $priority }}">{{ ucfirst($priority) }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Category</label>
+                                        <select name="category" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm">
+                                            @foreach (['general', 'bug', 'billing', 'performance', 'security', 'feature_request', 'other'] as $category)
+                                                <option value="{{ $category }}">{{ ucfirst(str_replace('_', ' ', $category)) }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
 
-                                <div class="lg:col-span-2">
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Details</label>
-                                    <textarea name="description" rows="4" required class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm" placeholder="Include what happened, expected behavior, and replication steps."></textarea>
-                                </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Priority</label>
+                                        <select name="priority" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm">
+                                            @foreach (['low', 'medium', 'high', 'urgent'] as $priority)
+                                                <option value="{{ $priority }}">{{ ucfirst($priority) }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
 
-                                <div class="lg:col-span-2">
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Attachment (optional)</label>
-                                    <input type="file" name="attachment" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx">
-                                </div>
+                                    <div class="lg:col-span-2">
+                                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Details</label>
+                                        <textarea name="description" rows="4" required class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm" placeholder="Include what happened, expected behavior, and replication steps."></textarea>
+                                    </div>
 
-                                <div class="lg:col-span-2">
-                                    <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Submit Ticket</button>
-                                </div>
-                            </form>
+                                    <div class="lg:col-span-2">
+                                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Attachment (optional)</label>
+                                        <input type="file" name="attachment" class="mt-1 w-full rounded-md border-slate-200 bg-white text-sm" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx">
+                                    </div>
+
+                                    <div class="lg:col-span-2">
+                                        <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Submit Ticket</button>
+                                    </div>
+                                </form>
+                            </details>
                         @else
                             <div class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                                 Support ticket creation is limited to the barbershop owner account.
@@ -387,49 +411,63 @@
                         @endif
 
                         @forelse ($supportTickets as $ticket)
-                            <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                                <div>
-                                    <p class="text-sm font-semibold text-slate-900">{{ $ticket->ticket_number }} · {{ $ticket->subject }}</p>
-                                    <p class="mt-1 text-xs text-slate-500">
-                                        Status: {{ ucfirst(str_replace('_', ' ', $ticket->status)) }}
-                                        · Category: {{ ucfirst(str_replace('_', ' ', $ticket->category)) }}
-                                        · Priority: {{ ucfirst($ticket->priority) }}
-                                        · Last update: {{ optional($ticket->latest_reply_at)->diffForHumans() ?? 'n/a' }}
-                                    </p>
-                                </div>
-
-                                <div class="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-3">
-                                    @forelse ($ticket->messages as $message)
-                                        <div class="rounded-md border border-slate-200 bg-white p-3">
-                                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                                {{ str_replace('_', ' ', $message->sender_role) }}
-                                                @if ($message->sender?->name)
-                                                    · {{ $message->sender->name }}
-                                                @endif
-                                                · {{ $message->created_at?->toDateTimeString() }}
+                            @php
+                                $statusClass = $managerTicketStatusClasses[$ticket->status] ?? 'bg-slate-100 text-slate-700';
+                                $priorityClass = $managerTicketPriorityClasses[$ticket->priority] ?? 'bg-slate-100 text-slate-700';
+                            @endphp
+                            <details class="group rounded-xl border border-slate-200 bg-white">
+                                <summary class="list-none cursor-pointer p-4">
+                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                        <div>
+                                            <p class="text-sm font-semibold text-slate-900">{{ $ticket->ticket_number }} · {{ $ticket->subject }}</p>
+                                            <p class="mt-1 text-xs text-slate-500">
+                                                Category: {{ ucfirst(str_replace('_', ' ', $ticket->category)) }}
+                                                · Last update: {{ optional($ticket->latest_reply_at)->diffForHumans() ?? 'n/a' }}
                                             </p>
-                                            <p class="mt-1 whitespace-pre-line text-sm text-slate-700">{{ $message->message }}</p>
-
-                                            @if ($message->hasAttachment())
-                                                <a href="{{ $message->attachmentUrl() }}" target="_blank" rel="noopener" class="mt-2 inline-flex text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                                                    Attachment: {{ $message->attachment_original_name ?: 'Download file' }}
-                                                </a>
-                                            @endif
                                         </div>
-                                    @empty
-                                        <p class="text-sm text-slate-500">No messages yet.</p>
-                                    @endforelse
-                                </div>
 
-                                @if ($canManageBilling)
-                                    <form method="POST" action="{{ route('manager.support-tickets.reply', ['ticket' => $ticket->id]) }}" enctype="multipart/form-data" class="space-y-3">
-                                        @csrf
-                                        <textarea name="message" rows="3" required class="w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Add a reply"></textarea>
-                                        <input type="file" name="attachment" class="w-full rounded-md border-slate-200 bg-white text-sm" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx">
-                                        <button type="submit" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">Send Reply</button>
-                                    </form>
-                                @endif
-                            </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $statusClass }}">{{ strtoupper(str_replace('_', ' ', $ticket->status)) }}</span>
+                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $priorityClass }}">{{ strtoupper($ticket->priority) }}</span>
+                                            <span class="text-xs font-semibold text-slate-500">Open Thread</span>
+                                        </div>
+                                    </div>
+                                </summary>
+
+                                <div class="space-y-4 border-t border-slate-100 bg-slate-50 p-4">
+                                    <div class="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3">
+                                        @forelse ($ticket->messages as $message)
+                                            <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                    {{ str_replace('_', ' ', $message->sender_role) }}
+                                                    @if ($message->sender?->name)
+                                                        · {{ $message->sender->name }}
+                                                    @endif
+                                                    · {{ $message->created_at?->toDateTimeString() }}
+                                                </p>
+                                                <p class="mt-1 whitespace-pre-line text-sm text-slate-700">{{ $message->message }}</p>
+
+                                                @if ($message->hasAttachment())
+                                                    <a href="{{ $message->attachmentUrl() }}" target="_blank" rel="noopener" class="mt-2 inline-flex text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                                        Attachment: {{ $message->attachment_original_name ?: 'Download file' }}
+                                                    </a>
+                                                @endif
+                                            </div>
+                                        @empty
+                                            <p class="text-sm text-slate-500">No messages yet.</p>
+                                        @endforelse
+                                    </div>
+
+                                    @if ($canManageBilling)
+                                        <form method="POST" action="{{ route('manager.support-tickets.reply', ['ticket' => $ticket->id]) }}" enctype="multipart/form-data" class="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                                            @csrf
+                                            <textarea name="message" rows="3" required class="w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Add a reply"></textarea>
+                                            <input type="file" name="attachment" class="w-full rounded-md border-slate-200 bg-white text-sm" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx">
+                                            <button type="submit" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">Send Reply</button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </details>
                         @empty
                             <p class="text-sm text-slate-500">No support tickets yet.</p>
                         @endforelse
