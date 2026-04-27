@@ -6,11 +6,21 @@ The format is based on Keep a Changelog and uses Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-27
+
 ### Added
-- Versioning policy documentation (VERSIONING.md)
+- Automatic late-marking for appointments exceeding 10-minute grace period
+- Attendance tracking fields (arrived_at, late_marked_at, no_show_marked_at) on appointments
+- Email notifications to customer + managers when appointment marked as late or no-show
+- Barber dashboard auto-late detection on page load
+- Overlap protection: barber cannot start appointment if projectedEnd exceeds next scheduled appointment
 
 ### Changed
-- Repository now has a formal release/versioning process for GitHub support and updates
+- Barber status update workflow now triggers attendance notifications for late/no-show state changes
+- BarberDashboardController refactored to support per-appointment notification dispatch
+
+### Fixed
+- Late notifications now sent consistently for both manual status changes and auto-grace-period expiration
 
 ## [1.0.0] - 2026-04-12
 
