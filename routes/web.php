@@ -17,6 +17,7 @@ use App\Http\Controllers\Manager\PointsController as ManagerPointsController;
 use App\Http\Controllers\Manager\QueueController;
 use App\Http\Controllers\Manager\ScheduleController as ManagerScheduleController;
 use App\Http\Controllers\Manager\ServiceController as ManagerServiceController;
+use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\Public\LandingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ManagerDashboardController;
@@ -32,6 +33,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::resource('modules', ModuleController::class);
 
 Route::get('/welcome', [LandingController::class, 'show'])->name('public.landing');
 
