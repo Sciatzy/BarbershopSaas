@@ -315,7 +315,7 @@ class SystemVersion
         }
 
         $base = base_path();
-        $command = 'git -C '.escapeshellarg($base).' '.implode(' ', array_map('escapeshellarg', $arguments)).' 2>/dev/null';
+        $command = 'git -C '.escapeshellarg($base).' '.implode(' ', array_map('escapeshellarg', $arguments)).' 2>&1';
 
         $rawOutput = shell_exec($command);
 
@@ -323,7 +323,13 @@ class SystemVersion
             return null;
         }
 
-        return trim($rawOutput);
+        $trimmed = trim($rawOutput);
+
+        if ($trimmed !== '' && preg_match('/^(fatal|error):/i', $trimmed) === 1) {
+            return null;
+        }
+
+        return $trimmed;
     }
 
     private function canRunShellCommands(): bool
