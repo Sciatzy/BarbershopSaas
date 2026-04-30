@@ -77,7 +77,7 @@
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <h3 class="text-lg font-semibold text-slate-800">Add Branch</h3>
-                <p class="text-sm text-slate-500 mt-1">Customers will select a branch during booking under your tenant domain.</p>
+                <p class="text-sm text-slate-500 mt-1">Customers will select a branch during booking under your tenant domain. You can also create the branch manager account here.</p>
 
                 <form method="POST" action="{{ route('manager.branches.store') }}" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     @csrf
@@ -90,6 +90,16 @@
                     <div>
                         <label for="address" class="block text-sm font-medium text-slate-600">Branch Address</label>
                         <input id="address" name="address" type="text" value="{{ old('address') }}" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+
+                    <div>
+                        <label for="manager_name" class="block text-sm font-medium text-slate-600">Branch Manager Name <span class="text-slate-400">(optional)</span></label>
+                        <input id="manager_name" name="manager_name" type="text" value="{{ old('manager_name') }}" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g. Juan Dela Cruz">
+                    </div>
+
+                    <div>
+                        <label for="manager_email" class="block text-sm font-medium text-slate-600">Branch Manager Email <span class="text-slate-400">(optional)</span></label>
+                        <input id="manager_email" name="manager_email" type="email" value="{{ old('manager_email') }}" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="manager@barbershop.test">
                     </div>
 
                     <div class="md:col-span-2">
@@ -132,28 +142,45 @@
                                         @endif
                                     </td>
                                     <td class="px-4 py-3 text-slate-600">{{ optional($branch->created_at)->format('Y-m-d') }}</td>
-                                    <td class="px-4 py-3 text-slate-600">
-                                        @if (! $branchManager)
-                                            <form method="POST" action="{{ route('manager.branches.assign-manager', $branch) }}" class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-                                                @csrf
-                                                <input name="manager_name" type="text" value="{{ old('manager_name') }}" placeholder="Manager Name" required class="rounded-md border-slate-200 bg-slate-50 text-xs focus:border-blue-500 focus:ring-blue-500">
-                                                <input name="manager_email" type="email" value="{{ old('manager_email') }}" placeholder="Manager Email" required class="rounded-md border-slate-200 bg-slate-50 text-xs focus:border-blue-500 focus:ring-blue-500">
-                                                <button type="submit" class="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500">Add Manager</button>
-                                            </form>
-                                        @endif
+                                    <td class="px-4 py-3 text-slate-600 align-top">
+                                        <div class="min-w-[260px] space-y-2">
+                                            @if ($branchManager)
+                                                <form method="POST" action="{{ route('manager.branches.update-manager', $branch) }}" class="rounded-lg border border-slate-200 bg-slate-50/40 p-2">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                        <input name="manager_name" type="text" value="{{ old('manager_name', $branchManager->name) }}" placeholder="Manager Name" required class="w-full rounded-md border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-blue-500">
+                                                        <input name="manager_email" type="email" value="{{ old('manager_email', $branchManager->email) }}" placeholder="Manager Email" required class="w-full rounded-md border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-blue-500">
+                                                    </div>
+                                                    <button type="submit" class="mt-2 w-full rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500">Update Manager</button>
+                                                </form>
+                                            @else
+                                                <form method="POST" action="{{ route('manager.branches.assign-manager', $branch) }}" class="rounded-lg border border-slate-200 bg-slate-50/40 p-2">
+                                                    @csrf
+                                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                        <input name="manager_name" type="text" value="{{ old('manager_name') }}" placeholder="Manager Name" required class="w-full rounded-md border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-blue-500">
+                                                        <input name="manager_email" type="email" value="{{ old('manager_email') }}" placeholder="Manager Email" required class="w-full rounded-md border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-blue-500">
+                                                    </div>
+                                                    <button type="submit" class="mt-2 w-full rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500">Add Manager</button>
+                                                </form>
+                                            @endif
 
-                                        <form method="POST" action="{{ route('manager.branches.update', $branch) }}" class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-                                            @csrf
-                                            @method('PATCH')
-                                            <input name="name" type="text" value="{{ $branch->name }}" required class="rounded-md border-slate-200 bg-slate-50 text-xs focus:border-blue-500 focus:ring-blue-500">
-                                            <input name="address" type="text" value="{{ $branch->address }}" required class="rounded-md border-slate-200 bg-slate-50 text-xs focus:border-blue-500 focus:ring-blue-500">
-                                            <button type="submit" class="rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">Save</button>
-                                        </form>
-                                        <form method="POST" action="{{ route('manager.branches.destroy', $branch) }}" onsubmit="return confirm('Delete this branch?');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500">Delete</button>
-                                        </form>
+                                            <form method="POST" action="{{ route('manager.branches.update', $branch) }}" class="rounded-lg border border-slate-200 bg-slate-50/40 p-2">
+                                                @csrf
+                                                @method('PATCH')
+                                                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                    <input name="name" type="text" value="{{ $branch->name }}" required class="w-full rounded-md border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-blue-500">
+                                                    <input name="address" type="text" value="{{ $branch->address }}" required class="w-full rounded-md border-slate-200 bg-white text-xs focus:border-blue-500 focus:ring-blue-500">
+                                                </div>
+                                                <button type="submit" class="mt-2 w-full rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">Save Branch</button>
+                                            </form>
+
+                                            <form method="POST" action="{{ route('manager.branches.destroy', $branch) }}" onsubmit="return confirm('Delete this branch?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="w-full rounded-md bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500">Delete Branch</button>
+                                            </form>
+                                        </div>
                                     </td>
                                 </tr>
                             @empty

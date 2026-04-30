@@ -151,6 +151,9 @@
         </form>
 
         @php
+            /** @var \App\Models\Tenant|null $currentTenant */
+            $currentTenant = app()->bound('tenant') ? app('tenant') : null;
+
             $systemVersion = app(\App\Support\SystemVersion::class)->resolve();
             $versionMeta = collect([
                 $systemVersion['status'] ?? null,
@@ -159,11 +162,24 @@
             ])->filter(fn ($value) => filled($value))->implode(' · ');
         @endphp
 
-        <div class="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2" title="Fetched from repository metadata or APP_VERSION configuration.">
-            <p class="text-[11px] font-semibold text-gray-600">System {{ $systemVersion['display_version'] ?? 'vdev' }}</p>
-            @if ($versionMeta !== '')
-                <p class="mt-0.5 text-[10px] text-gray-400 uppercase tracking-wide">{{ $versionMeta }}</p>
-            @endif
-        </div>
+        @if ($currentTenant && ! $viewer->hasRole('Platform Admin'))
+            <div class="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2" title="Current running version for this domain.">
+                <p class="text-[11px] font-semibold text-gray-600">
+                    Version {{ $currentTenant->applied_system_version ?: ($systemVersion['display_version'] ?? 'vdev') }}
+                </p>
+                @if ($currentTenant->applied_system_version_at)
+                    <p class="mt-0.5 text-[10px] text-gray-400 uppercase tracking-wide">
+                        Applied At: {{ $currentTenant->applied_system_version_at->toDateTimeString() }}
+                    </p>
+                @endif
+            </div>
+        @else
+            <div class="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2" title="Fetched from repository metadata or APP_VERSION configuration.">
+                <p class="text-[11px] font-semibold text-gray-600">System {{ $systemVersion['display_version'] ?? 'vdev' }}</p>
+                @if ($versionMeta !== '')
+                    <p class="mt-0.5 text-[10px] text-gray-400 uppercase tracking-wide">{{ $versionMeta }}</p>
+                @endif
+            </div>
+        @endif
     </div>
 </aside>

@@ -67,8 +67,8 @@ class ManagerDashboardController extends Controller
                     'description' => 'View queue and move bookings through queue statuses.',
                 ],
                 'manage_barbers' => [
-                    'label' => 'Manage Barber Assignments',
-                    'description' => 'View available barbers and assign them to branches.',
+                    'label' => 'Manage barbers',
+                    'description' => 'View, create, edit, and delete barbers',
                 ],
                 'manage_schedules' => [
                     'label' => 'Manage Schedules',
@@ -299,6 +299,8 @@ class ManagerDashboardController extends Controller
         $manageableCustomers = collect();
         $assignableBranches = collect();
 
+        $branchCashouts = collect();
+
         if ($canManageUsers) {
             $manageableBarbers = User::query()
                 ->withoutGlobalScopes()
@@ -316,7 +318,7 @@ class ManagerDashboardController extends Controller
                 ->where('tenant_id', $tenantId)
                 ->role('Customer')
                 ->orderBy('name')
-                ->get(['id', 'name', 'email', 'created_at']);
+                ->get(['id', 'name', 'email', 'points_balance', 'created_at']);
 
             $assignableBranches = Branch::query()
                 ->withoutGlobalScopes()
@@ -327,6 +329,27 @@ class ManagerDashboardController extends Controller
                 )
                 ->orderBy('name')
                 ->get(['id', 'name']);
+        }
+
+        if ($canOperateBranch && ! empty($user->branch_id)) {
+            $branchCashouts = DB::table('barber_cashouts as bc')
+                ->join('users as barber', 'barber.id', '=', 'bc.barber_id')
+                ->where('bc.tenant_id', $tenantId)
+                ->where('bc.branch_id', $user->branch_id)
+                ->orderByRaw("bc.status = 'pending' desc")
+                ->orderByDesc('bc.created_at')
+                ->limit(30)
+                ->get([
+                    'bc.id',
+                    'bc.points',
+                    'bc.amount_php',
+                    'bc.status',
+                    'bc.created_at',
+                    'bc.approved_at',
+                    'bc.paid_at',
+                    'bc.rejection_reason',
+                    'barber.name as barber_name',
+                ]);
         }
 
         $pendingSystemReleases = TenantSystemRelease::query()
@@ -373,6 +396,7 @@ class ManagerDashboardController extends Controller
             'manageableBarbers' => $manageableBarbers,
             'manageableCustomers' => $manageableCustomers,
             'assignableBranches' => $assignableBranches,
+            'branchCashouts' => $branchCashouts,
             'pendingSystemReleases' => $pendingSystemReleases,
             'supportTickets' => $supportTickets,
         ]);

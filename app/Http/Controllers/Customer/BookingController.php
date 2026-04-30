@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Customer;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Booking;
+use App\Models\Schedule;
+use App\Models\ScheduleOverride;
 use App\Models\Service;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -17,6 +19,9 @@ use Illuminate\View\View;
 
 class BookingController extends Controller
 {
+    private const SLOT_STEP_MINUTES = 15;
+    private const DEFAULT_SLOT_INTERVAL_MINUTES = 30;
+
     public function index(Request $request): View
     {
         $customer = $request->user();
@@ -27,7 +32,7 @@ class BookingController extends Controller
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('customer_id', $customer->id)
-            ->with(['service', 'staff'])
+            ->with(['service', 'staff', 'barber', 'proposedReplacement'])
             ->latest($bookingSortColumn)
             ->latest('created_at')
             ->get();
@@ -42,11 +47,20 @@ class BookingController extends Controller
         $customer = $request->user();
         $tenantId = (string) ($customer->tenant_id ?? '');
 
+        $selectedDate = (string) $request->query('date', now()->toDateString());
+        $selectedBranchId = (int) $request->query('branch_id', old('branch_id', 0));
+        $selectedServiceId = (int) $request->query('service_id', old('service_id', 0));
+        $selectedBarberId = (int) $request->query('staff_id', old('staff_id', 0));
+
         $branches = Branch::query()
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->orderBy('name')
             ->get(['id', 'name', 'address']);
+
+        if ($selectedBranchId > 0 && ! $branches->contains(fn ($branch) => (int) $branch->id === $selectedBranchId)) {
+            $selectedBranchId = 0;
+        }
 
         $services = Service::query()
             ->withoutGlobalScopes()
@@ -56,21 +70,45 @@ class BookingController extends Controller
             ->orderBy('name')
             ->get();
 
-        $barbers = User::query()
+        if ($selectedServiceId > 0 && ! $services->contains(fn ($service) => (int) $service->id === $selectedServiceId)) {
+            $selectedServiceId = 0;
+        }
+
+        $barbersQuery = User::query()
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->role('Barber')
-            ->orderBy('name')
-            ->get(['id', 'name', 'branch_id']);
+            ->orderBy('name');
+
+        if ($selectedBranchId > 0) {
+            $barbersQuery->where('branch_id', $selectedBranchId);
+        }
+
+        $barbers = $barbersQuery->get(['id', 'name', 'branch_id']);
+
+        if ($selectedBarberId > 0 && ! $barbers->contains(fn ($barber) => (int) $barber->id === $selectedBarberId)) {
+            $selectedBarberId = 0;
+        }
 
         $routeServiceId = (int) ($request->route('service') ?? 0);
-        $selectedServiceId = $routeServiceId > 0 ? $routeServiceId : (int) old('service_id', 0);
+        $selectedServiceId = $routeServiceId > 0 ? $routeServiceId : $selectedServiceId;
+
+        $availableSlots = $this->availableSlotsForDate(
+            $tenantId,
+            $selectedBarberId,
+            $selectedDate,
+            $selectedServiceId,
+        );
 
         return view('customer.bookings.create', [
             'branches' => $branches,
             'services' => $services,
             'barbers' => $barbers,
             'selectedServiceId' => $selectedServiceId,
+            'selectedDate' => $selectedDate,
+            'selectedBranchId' => $selectedBranchId,
+            'selectedBarberId' => $selectedBarberId,
+            'availableSlots' => $availableSlots,
         ]);
     }
 
@@ -91,10 +129,12 @@ class BookingController extends Controller
                 'exists:services,id',
             ],
             'staff_id' => [
-                'nullable',
+                'required',
                 'integer',
                 'exists:users,id',
             ],
+            'appointment_date' => ['required', 'date', 'after_or_equal:today'],
+            'appointment_time' => ['required', 'date_format:H:i'],
             'notes' => ['nullable', 'string', 'max:300'],
         ]);
 
@@ -110,35 +150,37 @@ class BookingController extends Controller
             ->where('tenant_id', $tenantId)
             ->findOrFail($validated['branch_id']);
 
-        $staffId = $validated['staff_id'] ?? null;
+        $staffId = (int) $validated['staff_id'];
 
-        if ($staffId !== null) {
-            User::query()
-                ->withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->where('branch_id', $branch->id)
-                ->role('Barber')
-                ->findOrFail($staffId);
-        }
-
-        $price = (float) ($service->base_price ?? $service->price ?? 0);
-
-        // Find a default barber if one isn't explicitly chosen
-        $barberUsr = User::query()
+        User::query()
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('branch_id', $branch->id)
             ->role('Barber')
-            ->first();
+            ->findOrFail($staffId);
 
-        if (! $staffId && ! $barberUsr) {
-            return back()->withErrors(['staff_id' => 'No barber is assigned to the selected branch yet.'])->withInput();
+        $appointmentDateTime = CarbonImmutable::createFromFormat(
+            'Y-m-d H:i',
+            $validated['appointment_date'].' '.$validated['appointment_time']
+        );
+
+        if ($appointmentDateTime->lessThanOrEqualTo(now())) {
+            return back()->withErrors(['appointment_time' => 'Please choose a future appointment time.'])->withInput();
         }
 
-        $barberId = $staffId ?? $barberUsr->id;
+        $availableSlots = $this->availableSlotsForDate($tenantId, $staffId, $validated['appointment_date'], (int) $service->id);
+        $slotValues = $availableSlots->pluck('value');
+
+        if (! $slotValues->contains((string) $validated['appointment_time'])) {
+            return back()->withErrors(['appointment_time' => 'Selected time slot is no longer available.'])->withInput();
+        }
+
+        $price = (float) ($service->base_price ?? $service->price ?? 0);
+
+        $barberId = $staffId;
 
         try {
-            $booking = DB::transaction(function () use ($tenantId, $customer, $service, $branch, $staffId, $barberId, $price, $validated): Booking {
+            $booking = DB::transaction(function () use ($tenantId, $customer, $service, $branch, $staffId, $barberId, $price, $validated, $appointmentDateTime): Booking {
                 $existingActiveBooking = Booking::query()
                     ->withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
@@ -176,7 +218,7 @@ class BookingController extends Controller
                     'total_price' => $price,
                     'status' => 'queued',
                     'booked_at' => now(),
-                    'appointment_datetime' => now(),
+                    'appointment_datetime' => Carbon::instance($appointmentDateTime),
                     'notes' => $validated['notes'] ?? null,
                     'source' => 'online',
                     'created_by' => $customer->id,
@@ -190,7 +232,7 @@ class BookingController extends Controller
         }
 
         return redirect()->route('customer.bookings')
-            ->with('status', "You're in! Booking #{$booking->id} confirmed.");
+            ->with('status', "Appointment booked for {$appointmentDateTime->format('M d, Y g:i A')}! Booking #{$booking->id} created.");
     }
 
     public function cancel(Request $request, Booking $booking): RedirectResponse
@@ -233,6 +275,26 @@ class BookingController extends Controller
             return back()->withErrors(['reschedule' => 'Please choose a future date and time.']);
         }
 
+        $tenantId = (string) ($booking->tenant_id ?? '');
+        $barberId = (int) ($booking->barber_id ?? $booking->staff_id ?? 0);
+        $serviceId = (int) ($booking->service_id ?? 0);
+
+        if ($tenantId === '' || $barberId <= 0 || $serviceId <= 0) {
+            return back()->withErrors(['reschedule' => 'Unable to validate availability for this booking. Please contact support.']);
+        }
+
+        $availableSlots = $this->availableSlotsForDate(
+            $tenantId,
+            $barberId,
+            $validated['appointment_date'],
+            $serviceId,
+            (int) $booking->id,
+        );
+
+        if (! $availableSlots->pluck('value')->contains((string) $validated['appointment_time'])) {
+            return back()->withErrors(['reschedule' => 'Selected time slot is no longer available. Please choose another slot.']);
+        }
+
         $booking->appointment_datetime = Carbon::instance($newDateTime);
         $booking->save();
 
@@ -272,6 +334,77 @@ class BookingController extends Controller
         return back()->with('status', 'Thanks! Your feedback has been submitted.');
     }
 
+    public function respondEmergencyDecision(Request $request, Booking $booking): RedirectResponse
+    {
+        $booking = $this->resolveOwnedBooking($request, $booking);
+
+        if ((string) $booking->status !== 'queued') {
+            return back()->withErrors(['decision' => 'Only queued bookings can receive emergency decisions.']);
+        }
+
+        if (! (bool) ($booking->requires_customer_decision ?? false)) {
+            return back()->withErrors(['decision' => 'No pending emergency decision is required for this booking.']);
+        }
+
+        $validated = $request->validate([
+            'decision_action' => ['required', 'in:accept_reassign,reschedule,cancel'],
+        ]);
+
+        $action = (string) $validated['decision_action'];
+
+        if ($action === 'accept_reassign') {
+            $replacementBarberId = (int) ($booking->proposed_replacement_barber_id ?? 0);
+
+            if ($replacementBarberId <= 0) {
+                return back()->withErrors(['decision' => 'No replacement barber is currently proposed. Please choose reschedule or cancel, or wait for a new offer.']);
+            }
+
+            $replacementBarber = User::query()
+                ->withoutGlobalScopes()
+                ->where('tenant_id', (string) $booking->tenant_id)
+                ->where('branch_id', (int) $booking->branch_id)
+                ->role('Barber')
+                ->find($replacementBarberId);
+
+            if (! $replacementBarber) {
+                return back()->withErrors(['decision' => 'Proposed replacement barber is no longer available. Please choose reschedule or cancel.']);
+            }
+
+            $booking->barber_id = $replacementBarber->id;
+            $booking->staff_id = $replacementBarber->id;
+            $booking->notes = trim((string) ($booking->notes ?? '')."\nCustomer accepted emergency reassignment to {$replacementBarber->name} on ".now()->format('Y-m-d H:i'));
+            $booking->requires_customer_decision = false;
+            $booking->proposed_replacement_barber_id = null;
+            $booking->customer_decision_due_at = null;
+            $booking->emergency_reason = null;
+            $booking->save();
+
+            return back()->with('status', "Thanks for confirming. Your booking has been reassigned to {$replacementBarber->name}.");
+        }
+
+        if ($action === 'reschedule') {
+            $booking->status = 'cancelled';
+            $booking->notes = trim((string) ($booking->notes ?? '')."\nCustomer requested emergency reschedule on ".now()->format('Y-m-d H:i'));
+            $booking->requires_customer_decision = false;
+            $booking->proposed_replacement_barber_id = null;
+            $booking->customer_decision_due_at = null;
+            $booking->save();
+
+            return redirect()
+                ->route('customer.bookings.create')
+                ->with('status', 'Your previous booking was closed for rescheduling. Please pick a new time now.');
+        }
+
+        $booking->status = 'cancelled';
+        $booking->notes = trim((string) ($booking->notes ?? '')."\nCustomer cancelled due to barber emergency on ".now()->format('Y-m-d H:i'));
+        $booking->requires_customer_decision = false;
+        $booking->proposed_replacement_barber_id = null;
+        $booking->customer_decision_due_at = null;
+        $booking->save();
+
+        return back()->with('status', 'Booking cancelled as requested.');
+    }
+
     private function resolveOwnedBooking(Request $request, Booking $booking): Booking
     {
         $customer = $request->user();
@@ -287,5 +420,128 @@ class BookingController extends Controller
         abort_if($ownedBooking === null, 403);
 
         return $ownedBooking;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{value:string, label:string}>
+     */
+    private function availableSlotsForDate(string $tenantId, int $barberId, string $date, int $serviceId = 0, int $excludeBookingId = 0): \Illuminate\Support\Collection
+    {
+        if ($tenantId === '' || $barberId <= 0) {
+            return collect();
+        }
+
+        $serviceDurationMinutes = $this->resolveServiceDurationMinutes($tenantId, $serviceId);
+
+        try {
+            $dateValue = CarbonImmutable::parse($date)->startOfDay();
+        } catch (\Throwable) {
+            return collect();
+        }
+
+        $dayOfWeek = (int) $dateValue->dayOfWeek;
+
+        $override = ScheduleOverride::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('barber_id', $barberId)
+            ->whereDate('schedule_date', $dateValue->toDateString())
+            ->first(['is_working', 'start_time', 'end_time']);
+
+        if ($override) {
+            if (! $override->is_working) {
+                return collect();
+            }
+
+            $schedules = collect();
+
+            if (! empty($override->start_time) && ! empty($override->end_time)) {
+                $schedules->push((object) [
+                    'start_time' => $override->start_time,
+                    'end_time' => $override->end_time,
+                ]);
+            }
+        } else {
+            $schedules = Schedule::query()
+                ->withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('barber_id', $barberId)
+                ->where('day_of_week', $dayOfWeek)
+                ->where('is_working', true)
+                ->orderBy('start_time')
+                ->get(['start_time', 'end_time']);
+        }
+
+        if ($schedules->isEmpty()) {
+            return collect();
+        }
+
+        $occupiedQuery = Booking::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('barber_id', $barberId)
+            ->whereDate('appointment_datetime', $dateValue->toDateString())
+            ->whereIn('status', ['queued', 'confirmed', 'arrived', 'late', 'in_progress', 'completed']);
+
+        if ($excludeBookingId > 0) {
+            $occupiedQuery->where('id', '!=', $excludeBookingId);
+        }
+
+        $occupiedIntervals = $occupiedQuery
+            ->with(['service:id,duration_minutes'])
+            ->get(['appointment_datetime', 'service_id'])
+            ->map(function (Booking $booking): array {
+                $start = CarbonImmutable::parse((string) $booking->appointment_datetime);
+                $duration = (int) ($booking->service?->duration_minutes ?? self::DEFAULT_SLOT_INTERVAL_MINUTES);
+                $duration = $duration > 0 ? $duration : self::DEFAULT_SLOT_INTERVAL_MINUTES;
+
+                return [
+                    'start' => $start,
+                    'end' => $start->addMinutes($duration),
+                ];
+            });
+
+        $slots = collect();
+
+        foreach ($schedules as $schedule) {
+            $cursor = CarbonImmutable::parse($dateValue->toDateString().' '.$schedule->start_time);
+            $end = CarbonImmutable::parse($dateValue->toDateString().' '.$schedule->end_time);
+
+            while ($cursor->addMinutes($serviceDurationMinutes)->lte($end)) {
+                $value = $cursor->format('H:i');
+                $candidateEnd = $cursor->addMinutes($serviceDurationMinutes);
+
+                $hasConflict = $occupiedIntervals->contains(function (array $interval) use ($cursor, $candidateEnd): bool {
+                    return $cursor->lt($interval['end']) && $candidateEnd->gt($interval['start']);
+                });
+
+                if (! $hasConflict && $cursor->greaterThan(now())) {
+                    $slots->push([
+                        'value' => $value,
+                        'label' => $cursor->format('g:i A'),
+                    ]);
+                }
+
+                $cursor = $cursor->addMinutes(self::SLOT_STEP_MINUTES);
+            }
+        }
+
+        return $slots->unique('value')->values();
+    }
+
+    private function resolveServiceDurationMinutes(string $tenantId, int $serviceId): int
+    {
+        if ($tenantId === '' || $serviceId <= 0) {
+            return self::DEFAULT_SLOT_INTERVAL_MINUTES;
+        }
+
+        $service = Service::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->find($serviceId, ['id', 'duration_minutes']);
+
+        $duration = (int) ($service?->duration_minutes ?? self::DEFAULT_SLOT_INTERVAL_MINUTES);
+
+        return $duration > 0 ? $duration : self::DEFAULT_SLOT_INTERVAL_MINUTES;
     }
 }

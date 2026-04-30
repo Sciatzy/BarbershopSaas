@@ -44,16 +44,30 @@ class AdminDashboardController extends Controller
             fn (Tenant $tenant): int => self::PLAN_MRR_PHP[$tenant->plan_tier] ?? 0
         );
 
-        $releases = SystemRelease::query()
+        $publishedReleases = SystemRelease::query()
             ->with(['syncedBy:id,name'])
             ->withCount([
                 'tenantStates as pending_states_count' => fn ($query) => $query->where('state', 'pending'),
                 'tenantStates as held_states_count' => fn ($query) => $query->where('state', 'held'),
                 'tenantStates as applied_states_count' => fn ($query) => $query->where('state', 'applied'),
             ])
+            ->where('publication_status', 'published')
+            ->orderByDesc('published_at')
+            ->orderByDesc('id')
+            ->paginate(5, ['*'], 'published_release_page')
+            ->withQueryString();
+
+        $draftReleases = SystemRelease::query()
+            ->with(['syncedBy:id,name'])
+            ->withCount([
+                'tenantStates as pending_states_count' => fn ($query) => $query->where('state', 'pending'),
+                'tenantStates as held_states_count' => fn ($query) => $query->where('state', 'held'),
+                'tenantStates as applied_states_count' => fn ($query) => $query->where('state', 'applied'),
+            ])
+            ->where('publication_status', '!=', 'published')
             ->latest('id')
-            ->take(12)
-            ->get();
+            ->paginate(5, ['*'], 'draft_release_page')
+            ->withQueryString();
 
         $ticketStatus = trim((string) $request->query('ticket_status', ''));
         $ticketPriority = trim((string) $request->query('ticket_priority', ''));
@@ -101,7 +115,8 @@ class AdminDashboardController extends Controller
             'tenants' => $tenants,
             'totalMrr' => $totalMrr,
             'planMrrPhp' => self::PLAN_MRR_PHP,
-            'systemReleases' => $releases,
+            'publishedReleases' => $publishedReleases,
+            'draftReleases' => $draftReleases,
             'supportTickets' => $supportTickets,
             'supportTicketFilters' => [
                 'status' => $ticketStatus,

@@ -6,6 +6,18 @@
     <div style="font-family:var(--font-display); font-size:72px; color:var(--gold); line-height:1;">★ <span data-count="{{ $balance ?? 0 }}">0</span> <span style="font-size:32px;">pts</span></div>
 </div>
 
+@if (session('points_status'))
+    <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.4); color:var(--cream); border-radius:var(--radius-lg); padding:14px 16px; margin-bottom:20px;">
+        {{ session('points_status') }}
+    </div>
+@endif
+
+@if (session('points_error'))
+    <div style="background:rgba(244,63,94,0.12); border:1px solid rgba(244,63,94,0.4); color:var(--cream); border-radius:var(--radius-lg); padding:14px 16px; margin-bottom:20px;">
+        {{ session('points_error') }}
+    </div>
+@endif
+
 <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:32px; margin-bottom:32px; position:relative; overflow:hidden;">
     <div style="display:flex; justify-content:space-between; align-items:center; position:relative; margin-bottom:24px;">
         <div style="position:absolute; top:20px; left:40px; right:40px; height:8px; background:var(--surface-3); border-radius:999px; z-index:0;"></div>
@@ -28,6 +40,23 @@
     <div style="background:var(--gold-dim); border:1px solid var(--gold); border-radius:var(--radius-lg); padding:24px;">
         <p style="margin:0 0 12px 0; color:var(--cream); font-weight:500;">Tell your barber your points balance when you book to apply a discount!</p>
         <p style="margin:0; color:var(--gold); font-size:14px; font-family:var(--font-mono);">Your balance: ★ {{ $balance ?? 0 }} pts</p>
+
+        <div style="margin-top:16px; display:flex; flex-wrap:wrap; gap:10px;">
+            @foreach($milestones ?? [] as $m)
+                @php
+                    $canRedeem = ($balance ?? 0) >= ($m['points'] ?? 0);
+                @endphp
+                <form method="POST" action="{{ route('customer.points.redeem') }}" style="margin:0;">
+                    @csrf
+                    <input type="hidden" name="points" value="{{ $m['points'] }}">
+                    <input type="hidden" name="reward" value="{{ $m['reward'] }}">
+                    <button type="submit" {{ $canRedeem ? '' : 'disabled' }}
+                        style="border-radius:999px; padding:10px 14px; border:1px solid var(--gold); font-family:var(--font-mono); font-size:12px; cursor:{{ $canRedeem ? 'pointer' : 'not-allowed' }}; opacity:{{ $canRedeem ? '1' : '0.45' }}; background:{{ $canRedeem ? 'var(--gold)' : 'transparent' }}; color:{{ $canRedeem ? 'var(--ink)' : 'var(--gold)' }};">
+                        Redeem {{ $m['points'] }} pts
+                    </button>
+                </form>
+            @endforeach
+        </div>
     </div>
 </div>
 
@@ -40,9 +69,24 @@
                 @foreach($ledger as $item)
                 <tr style="border-bottom:1px solid var(--border);">
                     <td style="padding:16px; color:var(--muted); font-size:13px;">{{ \Carbon\Carbon::parse($item->created_at)->format('M d, Y') }}</td>
-                    <td style="padding:16px; font-size:14px;">{{ $item->description ?? 'Adjustment' }}</td>
+                    <td style="padding:16px; font-size:14px;">{{ $item->notes ?? 'Adjustment' }}</td>
                     <td style="padding:16px; text-align:right; font-family:var(--font-mono); font-size:13px; color:{{ $item->type === 'earn' ? 'var(--green)' : ($item->type === 'redeem' ? 'var(--rust)' : 'var(--muted)') }};">
-                        {{ $item->type === 'earn' ? '+' : ($item->type === 'redeem' ? '-' : '') }}{{ $item->points }}
+                        @php
+                            $pointsValue = (int) ($item->points ?? 0);
+                            $absPoints = abs($pointsValue);
+                            $prefix = '';
+
+                            if ($item->type === 'earn') {
+                                $prefix = '+';
+                            } elseif ($item->type === 'redeem') {
+                                $prefix = '-';
+                            } elseif ($pointsValue > 0) {
+                                $prefix = '+';
+                            } elseif ($pointsValue < 0) {
+                                $prefix = '-';
+                            }
+                        @endphp
+                        {{ $prefix }}{{ $absPoints }}
                     </td>
                 </tr>
                 @endforeach

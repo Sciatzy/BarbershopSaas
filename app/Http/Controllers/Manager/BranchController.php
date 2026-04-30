@@ -15,6 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Spatie\Permission\Models\Role;
 
@@ -147,6 +148,100 @@ class BranchController extends Controller
             ->with('manager_status', 'Branch manager account created and emailed successfully.');
     }
 
+    public function updateManager(Request $request, Branch $branch): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->hasRole('Barbershop Admin')) {
+            abort(403);
+        }
+
+        $planRedirect = $this->ensureOwnerHasActivePlan($request);
+        if ($planRedirect instanceof RedirectResponse) {
+            return $planRedirect;
+        }
+
+        $tenantId = (string) ($user->tenant_id ?? '');
+        abort_if((string) ($branch->tenant_id ?? '') !== $tenantId, 403);
+
+        $manager = User::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('branch_id', $branch->id)
+            ->role('Branch Manager')
+            ->first();
+
+        if (! $manager) {
+            return back()->with('manager_error', 'No branch manager is currently assigned to this branch.');
+        }
+
+        $validated = $request->validate([
+            'manager_name' => ['required', 'string', 'max:255'],
+            'manager_email' => [
+                'required',
+                'string',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($manager->id),
+            ],
+        ]);
+
+        $previousName = (string) $manager->name;
+        $previousEmail = (string) $manager->email;
+        $temporaryPassword = Str::password(16);
+
+        $manager->name = $validated['manager_name'];
+        $manager->email = $validated['manager_email'];
+        $manager->password = Hash::make($temporaryPassword);
+        $manager->save();
+
+        $tenant = $user->tenant;
+        $tenantName = (string) ($tenant?->name ?? 'your barbershop');
+        $assignedDomain = strtolower((string) ($tenant?->primary_domain ?? ''));
+
+        if ($assignedDomain === '') {
+            $assignedDomain = strtolower((string) $request->getHost());
+            $assignedDomain = preg_replace('/^www\./', '', $assignedDomain) ?? $assignedDomain;
+        }
+
+        if ($assignedDomain === '') {
+            $assignedDomain = (string) parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST);
+        }
+
+        $loginUrl = $this->tenantProvisioning->tenantUrl($assignedDomain, '/login');
+        $dashboardUrl = $this->tenantProvisioning->tenantUrl($assignedDomain, '/manager');
+
+        $details = [
+            'Assigned Branch' => (string) $branch->name,
+            'Updated Name' => (string) $manager->name,
+            'Updated Email' => (string) $manager->email,
+            'Temporary Password' => $temporaryPassword,
+            'Assigned Domain' => $assignedDomain,
+            'Login URL' => $loginUrl,
+            'Manager Dashboard URL' => $dashboardUrl,
+        ];
+
+        if ($previousName !== (string) $manager->name) {
+            $details['Previous Name'] = $previousName;
+        }
+
+        if ($previousEmail !== (string) $manager->email) {
+            $details['Previous Email'] = $previousEmail;
+        }
+
+        $this->notifier->notifyUserWithDetails(
+            $manager,
+            'Your Branch Manager Profile Was Updated',
+            "Hi {$manager->name}, your branch manager profile for {$tenantName} was updated by the barbershop owner. A new temporary password has been generated for your account.",
+            $details,
+            'Please sign in using the temporary password and change it immediately. If you did not expect this change, contact your barbershop admin immediately.'
+        );
+
+        return redirect()
+            ->route('manager.branches.index')
+            ->with('manager_status', 'Branch manager details updated successfully. A temporary password was emailed to the manager.');
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
@@ -169,6 +264,8 @@ class BranchController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'address' => ['required', 'string', 'max:255'],
+            'manager_name' => ['nullable', 'string', 'max:255', 'required_with:manager_email'],
+            'manager_email' => ['nullable', 'string', 'email', 'max:255', 'required_with:manager_name', 'unique:users,email'],
         ]);
 
         try {
@@ -182,6 +279,61 @@ class BranchController extends Controller
         $branch->name = $validated['name'];
         $branch->address = $validated['address'];
         $branch->save();
+
+        $managerName = (string) ($validated['manager_name'] ?? '');
+        $managerEmail = (string) ($validated['manager_email'] ?? '');
+
+        if ($managerName !== '' && $managerEmail !== '') {
+            $temporaryPassword = Str::password(16);
+
+            $manager = User::query()->create([
+                'tenant_id' => $tenantId,
+                'branch_id' => $branch->id,
+                'name' => $managerName,
+                'email' => $managerEmail,
+                'password' => Hash::make($temporaryPassword),
+            ]);
+
+            Role::findOrCreate('Branch Manager', 'web');
+            $manager->assignRole('Branch Manager');
+
+            $tenant = $user->tenant;
+            $tenantName = (string) ($tenant?->name ?? 'your barbershop');
+            $assignedDomain = strtolower((string) ($tenant?->primary_domain ?? ''));
+
+            if ($assignedDomain === '') {
+                $assignedDomain = strtolower((string) $request->getHost());
+                $assignedDomain = preg_replace('/^www\./', '', $assignedDomain) ?? $assignedDomain;
+            }
+
+            if ($assignedDomain === '') {
+                $assignedDomain = (string) parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST);
+            }
+
+            $systemUrl = $this->tenantProvisioning->tenantUrl($assignedDomain);
+            $loginUrl = $this->tenantProvisioning->tenantUrl($assignedDomain, '/login');
+            $dashboardUrl = $this->tenantProvisioning->tenantUrl($assignedDomain, '/manager');
+
+            $this->notifier->notifyUserWithDetails(
+                $manager,
+                'Your Branch Manager Account Has Been Created',
+                "Hi {$manager->name}, your branch manager account for {$tenantName} is now active.",
+                [
+                    'Assigned Branch' => (string) $branch->name,
+                    'Login Email' => $manager->email,
+                    'Temporary Password' => $temporaryPassword,
+                    'Assigned Domain' => $assignedDomain,
+                    'System URL' => $systemUrl,
+                    'Login URL' => $loginUrl,
+                    'Manager Dashboard URL' => $dashboardUrl,
+                ],
+                'For account security, please sign in and change your password immediately.'
+            );
+
+            return redirect()
+                ->route('manager.branches.index')
+                ->with('branch_status', 'Branch and branch manager account created successfully.');
+        }
 
         return redirect()
             ->route('manager.branches.index')

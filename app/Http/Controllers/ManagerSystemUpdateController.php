@@ -26,7 +26,15 @@ class ManagerSystemUpdateController extends Controller
                 ->with('billing_status', 'This update is already applied for your tenant.');
         }
 
-        $this->syncService->applyTenantRelease($tenantRelease, $actor);
+        try {
+            $this->syncService->applyTenantRelease($tenantRelease, $actor);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return redirect()
+                ->route('manager.dashboard')
+                ->with('billing_error', 'Update failed during tenant database migration. No version change was applied.');
+        }
 
         $displayVersion = (string) ($tenantRelease->systemRelease?->display_version ?: $tenantRelease->systemRelease?->version ?: 'latest release');
 

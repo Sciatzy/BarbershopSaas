@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Schedule;
+use App\Models\ScheduleOverride;
 use App\Models\Service;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -161,14 +162,36 @@ class BookingController extends Controller
 
         $dayOfWeek = (int) $dateValue->dayOfWeek;
 
-        $schedules = Schedule::query()
+        $override = ScheduleOverride::query()
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('barber_id', $barberId)
-            ->where('day_of_week', $dayOfWeek)
-            ->where('is_working', true)
-            ->orderBy('start_time')
-            ->get(['start_time', 'end_time']);
+            ->whereDate('schedule_date', $dateValue->toDateString())
+            ->first(['is_working', 'start_time', 'end_time']);
+
+        if ($override) {
+            if (! $override->is_working) {
+                return collect();
+            }
+
+            $schedules = collect();
+
+            if (! empty($override->start_time) && ! empty($override->end_time)) {
+                $schedules->push((object) [
+                    'start_time' => $override->start_time,
+                    'end_time' => $override->end_time,
+                ]);
+            }
+        } else {
+            $schedules = Schedule::query()
+                ->withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('barber_id', $barberId)
+                ->where('day_of_week', $dayOfWeek)
+                ->where('is_working', true)
+                ->orderBy('start_time')
+                ->get(['start_time', 'end_time']);
+        }
 
         if ($schedules->isEmpty()) {
             return collect();

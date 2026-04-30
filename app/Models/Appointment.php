@@ -22,7 +22,11 @@ class Appointment extends Model
         'barber_id',
         'service_id',
         'staff_id',
+        'proposed_replacement_barber_id',
         'appointment_datetime',
+        'arrived_at',
+        'late_marked_at',
+        'no_show_marked_at',
         'booked_at',
         'completed_at',
         'google_calendar_event_id',
@@ -31,6 +35,9 @@ class Appointment extends Model
         'notes',
         'source',
         'created_by',
+        'requires_customer_decision',
+        'customer_decision_due_at',
+        'emergency_reason',
         'is_on_time',
         'customer_rating',
         'customer_feedback',
@@ -41,9 +48,14 @@ class Appointment extends Model
     {
         return [
             'appointment_datetime' => 'datetime',
+            'arrived_at' => 'datetime',
+            'late_marked_at' => 'datetime',
+            'no_show_marked_at' => 'datetime',
             'booked_at' => 'datetime',
             'completed_at' => 'datetime',
             'total_price' => 'decimal:2',
+            'requires_customer_decision' => 'boolean',
+            'customer_decision_due_at' => 'datetime',
             'is_on_time' => 'boolean',
         ];
     }
@@ -115,6 +127,11 @@ class Appointment extends Model
     public function staff(): BelongsTo
     {
         return $this->belongsTo(User::class, 'staff_id');
+    }
+
+    public function proposedReplacement(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'proposed_replacement_barber_id');
     }
 
     public function tenant(): BelongsTo

@@ -22,6 +22,7 @@ class SystemReleaseSyncService
     public function __construct(
         private SystemVersion $systemVersion,
         private TenantLifecycleNotifier $tenantLifecycleNotifier,
+        private TenantSchemaMigrationService $tenantSchemaMigrationService,
     ) {}
 
     public function syncLatest(?User $actor = null, bool $fetchRemote = true): SystemRelease
@@ -194,9 +195,17 @@ class SystemReleaseSyncService
 
     public function applyTenantRelease(TenantSystemRelease $tenantRelease, User $actor): void
     {
-        DB::transaction(function () use ($tenantRelease, $actor): void {
-            $tenantRelease->loadMissing(['tenant', 'systemRelease']);
+        $tenantRelease->loadMissing(['tenant', 'systemRelease']);
 
+        $tenant = $tenantRelease->tenant;
+
+        if (! $tenant) {
+            return;
+        }
+
+        $this->tenantSchemaMigrationService->migrateTenant($tenant);
+
+        DB::transaction(function () use ($tenantRelease, $actor): void {
             $release = $tenantRelease->systemRelease;
             $tenant = $tenantRelease->tenant;
 
@@ -241,6 +250,19 @@ class SystemReleaseSyncService
 
         if ($fetchRemote) {
             $this->runGitCommand(['fetch', $remote, '--tags', '--prune']);
+        }
+
+        $resolvedTag = trim((string) ($resolved['tag'] ?? ''));
+
+        if ($resolvedTag !== '') {
+            return [
+                'version' => $resolvedTag,
+                'display_version' => $this->displayVersion($resolvedTag),
+                'source' => 'git-tag',
+                'branch' => $this->stringOrNull($resolved['branch'] ?? null),
+                'commit_hash' => $this->stringOrNull($resolved['commit'] ?? null),
+                'short_commit' => $this->stringOrNull($resolved['short_commit'] ?? null),
+            ];
         }
 
         $remoteRef = $remote.'/'.$branch;

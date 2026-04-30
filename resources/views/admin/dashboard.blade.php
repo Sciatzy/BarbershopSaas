@@ -105,8 +105,8 @@
             <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div class="p-6 border-b border-gray-100 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h3 class="text-lg font-semibold text-slate-800">Automated Version Control Sync</h3>
-                        <p class="mt-1 text-sm text-slate-500">Fetch the latest central version and publish updates to all active tenants or selected cohorts.</p>
+                        <h3 class="text-lg font-semibold text-slate-800">Optional Version Rollout</h3>
+                        <p class="mt-1 text-sm text-slate-500">Admin sends release availability. Tenant applies update, and tenant DB migration runs during apply.</p>
                     </div>
 
                     <form method="POST" action="{{ route('admin.releases.fetch-latest') }}">
@@ -118,78 +118,160 @@
                     </form>
                 </div>
 
-                <div class="divide-y divide-slate-100">
-                    @forelse ($systemReleases as $release)
-                        <div class="p-6 space-y-4">
-                            <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                                <div>
-                                    <p class="text-sm font-semibold text-slate-900">
-                                        {{ $release->display_version ?: $release->version }}
-                                        <span class="ml-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $release->publication_status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700' }}">
-                                            {{ strtoupper($release->publication_status) }}
-                                        </span>
-                                    </p>
-                                    <p class="mt-1 text-xs text-slate-500">
-                                        Source: {{ $release->source ?? 'n/a' }}
-                                        @if ($release->branch)
-                                            · Branch: {{ $release->branch }}
-                                        @endif
-                                        @if ($release->short_commit || $release->commit_hash)
-                                            · Commit: {{ $release->short_commit ?: $release->commit_hash }}
-                                        @endif
-                                        @if ($release->published_at)
-                                            · Published: {{ $release->published_at->toDateTimeString() }}
-                                        @endif
-                                    </p>
-                                </div>
-                                <div class="flex flex-wrap gap-2 text-xs">
-                                    <span class="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">Pending: {{ $release->pending_states_count ?? 0 }}</span>
-                                    <span class="rounded-full bg-indigo-50 px-3 py-1 font-semibold text-indigo-700">Held: {{ $release->held_states_count ?? 0 }}</span>
-                                    <span class="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Applied: {{ $release->applied_states_count ?? 0 }}</span>
-                                </div>
-                            </div>
-
-                            <form method="POST" action="{{ route('admin.releases.publish', ['release' => $release->id]) }}" class="grid grid-cols-1 gap-3 lg:grid-cols-2" data-rollout-form>
-                                @csrf
-
-                                <div class="lg:col-span-2">
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Release Notes</label>
-                                    <textarea name="release_notes" rows="3" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Optional release notes shown to tenant owners">{{ old('release_notes', $release->release_notes) }}</textarea>
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Cohort</label>
-                                    <select name="cohort_mode" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" data-cohort-mode>
-                                        <option value="all_active">All Active Tenants</option>
-                                        <option value="plan_tier">Plan Tier</option>
-                                        <option value="tenant_ids">Specific Tenant IDs</option>
-                                    </select>
-                                </div>
-
-                                <div data-cohort-plan-wrapper class="hidden">
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Plan Tier</label>
-                                    <select name="cohort_plan_tier" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm">
-                                        @foreach (['starter', 'professional', 'business', 'enterprise'] as $tier)
-                                            <option value="{{ $tier }}">{{ ucfirst($tier) }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                <div data-cohort-tenant-wrapper class="hidden lg:col-span-2">
-                                    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant IDs</label>
-                                    <textarea name="cohort_tenant_ids" rows="2" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Comma-separated tenant IDs"></textarea>
-                                </div>
-
-                                <div class="lg:col-span-2">
-                                    <button type="submit" class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                                        Publish / Refresh Rollout
-                                    </button>
-                                </div>
-                            </form>
+                <div class="grid grid-cols-1 gap-6 p-6 xl:grid-cols-2">
+                    <div class="rounded-xl border border-emerald-100 bg-emerald-50/40">
+                        <div class="border-b border-emerald-100 px-4 py-3">
+                            <h4 class="text-sm font-semibold text-emerald-900">Published Releases</h4>
+                            <p class="mt-1 text-xs text-emerald-700">Live releases available to send or resend to tenant cohorts.</p>
                         </div>
-                    @empty
-                        <div class="p-6 text-sm text-slate-500">No synced releases yet. Use "Fetch Latest Release Metadata" first.</div>
-                    @endforelse
+
+                        <div class="max-h-[34rem] overflow-y-auto divide-y divide-emerald-100">
+                            @forelse ($publishedReleases as $release)
+                                <div class="p-4 space-y-3 bg-white/80">
+                                    <div>
+                                        <p class="text-sm font-semibold text-slate-900">
+                                            {{ $release->display_version ?: $release->version }}
+                                            <span class="ml-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-100 text-emerald-700">
+                                                {{ strtoupper($release->publication_status) }}
+                                            </span>
+                                        </p>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            Released: {{ $release->published_at ? $release->published_at->format('M d, Y g:i A') : 'Not released yet' }}
+                                        </p>
+                                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Audience: Active tenants</span>
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Pending: {{ $release->pending_states_count ?? 0 }}</span>
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Held: {{ $release->held_states_count ?? 0 }}</span>
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Applied: {{ $release->applied_states_count ?? 0 }}</span>
+                                        </div>
+                                    </div>
+
+                                    <form method="POST" action="{{ route('admin.releases.publish', ['release' => $release->id]) }}" class="grid grid-cols-1 gap-3 lg:grid-cols-2" data-rollout-form>
+                                        @csrf
+
+                                        <div class="lg:col-span-2">
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Release Notes</label>
+                                            <textarea name="release_notes" rows="2" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Optional release notes shown to tenant owners">{{ old('release_notes', $release->release_notes) }}</textarea>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Target Audience</label>
+                                            <select name="cohort_mode" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" data-cohort-mode>
+                                                <option value="all_active">All Active Tenants</option>
+                                                <option value="plan_tier">Plan Tier</option>
+                                                <option value="tenant_ids">Specific Tenant IDs</option>
+                                            </select>
+                                        </div>
+
+                                        <div data-cohort-plan-wrapper class="hidden">
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Plan Tier</label>
+                                            <select name="cohort_plan_tier" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm">
+                                                @foreach (['starter', 'professional', 'business', 'enterprise'] as $tier)
+                                                    <option value="{{ $tier }}">{{ ucfirst($tier) }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <div data-cohort-tenant-wrapper class="hidden lg:col-span-2">
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant IDs</label>
+                                            <textarea name="cohort_tenant_ids" rows="2" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Comma-separated tenant IDs"></textarea>
+                                        </div>
+
+                                        <div class="lg:col-span-2">
+                                            <button type="submit" class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                                                Send Optional Update
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            @empty
+                                <div class="p-4 text-sm text-slate-500">No published releases yet.</div>
+                            @endforelse
+                        </div>
+
+                        @if (method_exists($publishedReleases, 'links'))
+                            <div class="border-t border-emerald-100 px-4 py-3 bg-white">
+                                {{ $publishedReleases->links() }}
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="rounded-xl border border-amber-100 bg-amber-50/40">
+                        <div class="border-b border-amber-100 px-4 py-3">
+                            <h4 class="text-sm font-semibold text-amber-900">Draft Releases</h4>
+                            <p class="mt-1 text-xs text-amber-700">Upcoming releases waiting to be published.</p>
+                        </div>
+
+                        <div class="max-h-[34rem] overflow-y-auto divide-y divide-amber-100">
+                            @forelse ($draftReleases as $release)
+                                <div class="p-4 space-y-3 bg-white/80">
+                                    <div>
+                                        <p class="text-sm font-semibold text-slate-900">
+                                            {{ $release->display_version ?: $release->version }}
+                                            <span class="ml-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-amber-100 text-amber-700">
+                                                {{ strtoupper($release->publication_status) }}
+                                            </span>
+                                        </p>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            Released: {{ $release->published_at ? $release->published_at->format('M d, Y g:i A') : 'Not released yet' }}
+                                        </p>
+                                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Audience: Draft release</span>
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Pending: {{ $release->pending_states_count ?? 0 }}</span>
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Held: {{ $release->held_states_count ?? 0 }}</span>
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium">Applied: {{ $release->applied_states_count ?? 0 }}</span>
+                                        </div>
+                                    </div>
+
+                                    <form method="POST" action="{{ route('admin.releases.publish', ['release' => $release->id]) }}" class="grid grid-cols-1 gap-3 lg:grid-cols-2" data-rollout-form>
+                                        @csrf
+
+                                        <div class="lg:col-span-2">
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Release Notes</label>
+                                            <textarea name="release_notes" rows="2" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Optional release notes shown to tenant owners">{{ old('release_notes', $release->release_notes) }}</textarea>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Target Audience</label>
+                                            <select name="cohort_mode" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" data-cohort-mode>
+                                                <option value="all_active">All Active Tenants</option>
+                                                <option value="plan_tier">Plan Tier</option>
+                                                <option value="tenant_ids">Specific Tenant IDs</option>
+                                            </select>
+                                        </div>
+
+                                        <div data-cohort-plan-wrapper class="hidden">
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Plan Tier</label>
+                                            <select name="cohort_plan_tier" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm">
+                                                @foreach (['starter', 'professional', 'business', 'enterprise'] as $tier)
+                                                    <option value="{{ $tier }}">{{ ucfirst($tier) }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <div data-cohort-tenant-wrapper class="hidden lg:col-span-2">
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant IDs</label>
+                                            <textarea name="cohort_tenant_ids" rows="2" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm" placeholder="Comma-separated tenant IDs"></textarea>
+                                        </div>
+
+                                        <div class="lg:col-span-2">
+                                            <button type="submit" class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                                                Send Optional Update
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            @empty
+                                <div class="p-4 text-sm text-slate-500">No draft releases right now.</div>
+                            @endforelse
+                        </div>
+
+                        @if (method_exists($draftReleases, 'links'))
+                            <div class="border-t border-amber-100 px-4 py-3 bg-white">
+                                {{ $draftReleases->links() }}
+                            </div>
+                        @endif
+                    </div>
                 </div>
             </div>
 
@@ -373,7 +455,8 @@
                         <thead class="bg-slate-50 text-slate-500 rounded-t-xl">
                             <tr>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Name</th>
-     <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Owner Email</th>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Tenant ID</th>
+                                <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Owner Email</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Status</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Plan Tier</th>
                                 <th class="px-4 py-3 text-left font-medium uppercase tracking-wider text-xs text-slate-500">Domain</th>
@@ -401,6 +484,7 @@
                                 @endphp
                                 <tr>
                                     <td class="px-4 py-3 text-slate-800 font-medium">{{ $tenant->name }}</td>
+                                    <td class="px-4 py-3 text-slate-600 font-mono text-xs break-all">{{ $tenant->id }}</td>
                                     <td class="px-4 py-3 text-slate-600">{{ optional($tenant->owner)->email ?? '-' }}</td>
                                     <td class="px-4 py-3 text-slate-600 capitalize">{{ $tenant->status ?? 'pending' }}</td>
                                     <td class="px-4 py-3 text-slate-600 capitalize">{{ $tenant->plan_tier }}</td>
@@ -511,7 +595,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="11" class="px-4 py-6 text-center text-slate-400">No tenants found.</td>
+                                    <td colspan="12" class="px-4 py-6 text-center text-slate-400">No tenants found.</td>
                                 </tr>
                             @endforelse
                         </tbody>

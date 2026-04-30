@@ -54,13 +54,13 @@ class PointsService
         });
     }
 
-    public function redeemPoints(User $customer, int $points, ?int $bookingId = null): bool
+    public function redeemPoints(User $customer, int $points, ?int $bookingId = null, ?string $notes = null): bool
     {
         if ($points <= 0) {
             return false;
         }
 
-        return (bool) DB::transaction(function () use ($customer, $points, $bookingId): bool {
+        return (bool) DB::transaction(function () use ($customer, $points, $bookingId, $notes): bool {
             /** @var User|null $lockedCustomer */
             $lockedCustomer = User::query()->withoutGlobalScopes()->lockForUpdate()->find($customer->id);
 
@@ -84,7 +84,100 @@ class PointsService
                 'type' => 'redeem',
                 'points' => -$points,
                 'balance_after' => $newBalance,
-                'notes' => 'Redeemed points',
+                'notes' => $notes ?: 'Redeemed points',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return true;
+        });
+    }
+
+    public function adjustCustomerPoints(User $customer, int $delta, ?string $notes = null): bool
+    {
+        if ($delta === 0) {
+            return false;
+        }
+
+        return (bool) DB::transaction(function () use ($customer, $delta, $notes): bool {
+            /** @var User|null $lockedCustomer */
+            $lockedCustomer = User::query()->withoutGlobalScopes()->lockForUpdate()->find($customer->id);
+
+            if (! $lockedCustomer) {
+                return false;
+            }
+
+            $currentBalance = (int) ($lockedCustomer->points_balance ?? 0);
+            $newBalance = $currentBalance + $delta;
+
+            if ($newBalance < 0) {
+                return false;
+            }
+
+            $lockedCustomer->forceFill(['points_balance' => $newBalance])->save();
+
+            DB::table('points_ledger')->insert([
+                'tenant_id' => $lockedCustomer->tenant_id,
+                'customer_id' => $lockedCustomer->id,
+                'booking_id' => null,
+                'type' => 'adjustment',
+                'points' => $delta,
+                'balance_after' => $newBalance,
+                'notes' => $notes ?: 'Points adjustment',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return true;
+        });
+    }
+
+    public function getBarberPointsBalance(User $barber): int
+    {
+        return (int) DB::table('point_transactions')
+            ->where('tenant_id', $barber->tenant_id)
+            ->where('barber_id', $barber->id)
+            ->sum('points_awarded');
+    }
+
+    public function redeemBarberPoints(User $barber, int $points, ?string $reason = null): bool
+    {
+        if ($points <= 0) {
+            return false;
+        }
+
+        return $this->adjustBarberPoints($barber, -$points, $reason ?: 'Redeemed points');
+    }
+
+    public function adjustBarberPoints(User $barber, int $delta, string $reason): bool
+    {
+        if ($delta === 0) {
+            return false;
+        }
+
+        return (bool) DB::transaction(function () use ($barber, $delta, $reason): bool {
+            /** @var User|null $lockedBarber */
+            $lockedBarber = User::query()->withoutGlobalScopes()->lockForUpdate()->find($barber->id);
+
+            if (! $lockedBarber) {
+                return false;
+            }
+
+            $currentBalance = (int) DB::table('point_transactions')
+                ->where('tenant_id', $lockedBarber->tenant_id)
+                ->where('barber_id', $lockedBarber->id)
+                ->sum('points_awarded');
+
+            if (($currentBalance + $delta) < 0) {
+                return false;
+            }
+
+            DB::table('point_transactions')->insert([
+                'tenant_id' => $lockedBarber->tenant_id,
+                'barber_id' => $lockedBarber->id,
+                'appointment_id' => null,
+                'points_awarded' => $delta,
+                'reason' => $reason,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

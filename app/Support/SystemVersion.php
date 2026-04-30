@@ -115,7 +115,11 @@ class SystemVersion
             $metadata['source'] = $metadata['source'] === 'unavailable' ? 'git-cli' : 'git-files+cli';
         }
 
-        $tag = $this->runGitCommand(['describe', '--tags', '--abbrev=0']);
+        $tag = $this->readLatestSemverTagFromGitDirectory();
+
+        if ($tag === null) {
+            $tag = $this->runGitCommand(['describe', '--tags', '--abbrev=0']);
+        }
 
         if ($tag !== null) {
             $metadata['tag'] = $tag;
@@ -207,6 +211,69 @@ class SystemVersion
         }
 
         return null;
+    }
+
+    private function readLatestSemverTagFromGitDirectory(): ?string
+    {
+        $gitDirectory = $this->resolveGitDirectory();
+
+        if ($gitDirectory === null) {
+            return null;
+        }
+
+        $tags = [];
+        $tagsDirectory = $gitDirectory.DIRECTORY_SEPARATOR.'refs'.DIRECTORY_SEPARATOR.'tags';
+
+        if (is_dir($tagsDirectory)) {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($tagsDirectory, \FilesystemIterator::SKIP_DOTS)
+            );
+
+            foreach ($iterator as $fileInfo) {
+                if (! $fileInfo->isFile()) {
+                    continue;
+                }
+
+                $relativePath = str_replace($tagsDirectory.DIRECTORY_SEPARATOR, '', $fileInfo->getPathname());
+                $tags[] = str_replace(DIRECTORY_SEPARATOR, '/', $relativePath);
+            }
+        }
+
+        $packedRefsPath = $gitDirectory.DIRECTORY_SEPARATOR.'packed-refs';
+
+        if (is_file($packedRefsPath)) {
+            foreach (file($packedRefsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+                if ($line === '' || str_starts_with($line, '#') || str_starts_with($line, '^')) {
+                    continue;
+                }
+
+                $parts = preg_split('/\s+/', trim($line));
+
+                if (! is_array($parts) || count($parts) < 2) {
+                    continue;
+                }
+
+                $ref = (string) ($parts[1] ?? '');
+
+                if (str_starts_with($ref, 'refs/tags/')) {
+                    $tags[] = substr($ref, strlen('refs/tags/'));
+                }
+            }
+        }
+
+        $semverTags = array_values(array_unique(array_filter($tags, function (string $tag): bool {
+            return preg_match('/^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/i', $tag) === 1;
+        })));
+
+        if ($semverTags === []) {
+            return null;
+        }
+
+        usort($semverTags, function (string $left, string $right): int {
+            return version_compare(ltrim($right, 'vV'), ltrim($left, 'vV'));
+        });
+
+        return $semverTags[0] ?? null;
     }
 
     private function resolveGitDirectory(): ?string

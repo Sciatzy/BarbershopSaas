@@ -6,10 +6,14 @@ use App\Http\Controllers\AdminSystemReleaseController;
 use App\Http\Controllers\AdminTenantController;
 use App\Http\Controllers\BarberDashboardController;
 use App\Http\Controllers\BarberManagementController;
+use App\Http\Controllers\BarberCashoutController;
+use App\Http\Controllers\BarberPointsController;
 use App\Http\Controllers\BillingPlansController;
 use App\Http\Controllers\Manager\BranchController as ManagerBranchController;
 use App\Http\Controllers\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Manager\BarberCashoutController as ManagerBarberCashoutController;
+use App\Http\Controllers\Manager\PointsController as ManagerPointsController;
 use App\Http\Controllers\Manager\QueueController;
 use App\Http\Controllers\Manager\ScheduleController as ManagerScheduleController;
 use App\Http\Controllers\Manager\ServiceController as ManagerServiceController;
@@ -61,8 +65,15 @@ Route::middleware(['auth', 'verified', 'role:Barbershop Admin|Branch Manager'])-
     Route::get('/manager', [ManagerDashboardController::class, 'index'])->name('manager.dashboard');
     Route::middleware('active_plan')->group(function () {
         Route::get('/manager/barbers', [BarberManagementController::class, 'index'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.barbers.index');
+        Route::post('/manager/barbers', [BarberManagementController::class, 'store'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.barbers.store');
+        Route::patch('/manager/barbers/{barberId}', [BarberManagementController::class, 'update'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.barbers.update');
+        Route::delete('/manager/barbers/{barberId}', [BarberManagementController::class, 'destroy'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.barbers.destroy');
         Route::patch('/manager/barbers/{barberId}/branch', [BarberManagementController::class, 'updateBranchAssignment'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.barbers.branch');
         Route::get('/manager/queue', [QueueController::class, 'index'])->middleware('dashboard_access:branch_manager,manage_queue')->name('manager.queue.index');
+
+        Route::post('/manager/cashouts/{cashout}/approve', [ManagerBarberCashoutController::class, 'approve'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.cashouts.approve');
+        Route::post('/manager/cashouts/{cashout}/reject', [ManagerBarberCashoutController::class, 'reject'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.cashouts.reject');
+        Route::post('/manager/cashouts/{cashout}/paid', [ManagerBarberCashoutController::class, 'paid'])->middleware('dashboard_access:branch_manager,manage_barbers')->name('manager.cashouts.paid');
     });
 });
 
@@ -78,12 +89,15 @@ Route::middleware(['auth', 'verified', 'role:Barbershop Admin'])->group(function
         Route::post('/manager/users', [ManagerDashboardController::class, 'storeManagedUser'])->name('manager.users.store');
         Route::patch('/manager/users/{userId}/password', [ManagerDashboardController::class, 'updateManagedUserPassword'])->name('manager.users.password');
         Route::delete('/manager/users/{userId}', [ManagerDashboardController::class, 'destroyManagedUser'])->name('manager.users.destroy');
-        Route::post('/manager/barbers', [BarberManagementController::class, 'store'])->name('manager.barbers.store');
         Route::get('/manager/branches', [ManagerBranchController::class, 'index'])->name('manager.branches.index');
         Route::post('/manager/branches', [ManagerBranchController::class, 'store'])->name('manager.branches.store');
         Route::post('/manager/branches/{branch}/manager', [ManagerBranchController::class, 'assignManager'])->name('manager.branches.assign-manager');
+        Route::patch('/manager/branches/{branch}/manager', [ManagerBranchController::class, 'updateManager'])->name('manager.branches.update-manager');
         Route::patch('/manager/branches/{branch}', [ManagerBranchController::class, 'update'])->name('manager.branches.update');
         Route::delete('/manager/branches/{branch}', [ManagerBranchController::class, 'destroy'])->name('manager.branches.destroy');
+
+        Route::post('/manager/points/customers/adjust', [ManagerPointsController::class, 'adjustCustomer'])->name('manager.points.customers.adjust');
+        Route::post('/manager/points/barbers/adjust', [ManagerPointsController::class, 'adjustBarber'])->name('manager.points.barbers.adjust');
     });
 });
 
@@ -104,6 +118,11 @@ Route::middleware(['auth', 'verified', 'role:Branch Manager', 'active_plan'])->g
     Route::get('/manager/schedules', [ManagerScheduleController::class, 'index'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.index');
     Route::post('/manager/schedules', [ManagerScheduleController::class, 'store'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.store');
     Route::delete('/manager/schedules/{schedule}', [ManagerScheduleController::class, 'destroy'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.destroy');
+    Route::post('/manager/schedules/overrides', [ManagerScheduleController::class, 'storeOverride'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.overrides.store');
+    Route::delete('/manager/schedules/overrides/{override}', [ManagerScheduleController::class, 'destroyOverride'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.overrides.destroy');
+    Route::post('/manager/schedules/emergency-absence', [ManagerScheduleController::class, 'storeEmergencyAbsence'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.emergency.store');
+    Route::patch('/manager/schedules/emergency-bookings/request-all', [ManagerScheduleController::class, 'requestAllEmergencyDecisions'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.emergency.request-all');
+    Route::patch('/manager/schedules/emergency-bookings/{booking}/request', [ManagerScheduleController::class, 'requestEmergencyDecision'])->middleware('dashboard_access:branch_manager,manage_schedules')->name('manager.schedules.emergency.request');
     Route::post('/manager/queue/{booking}/status', [QueueController::class, 'updateStatus'])->middleware('dashboard_access:branch_manager,manage_queue')->name('manager.queue.status');
     Route::post('/manager/walk-ins', [WalkInWorkController::class, 'store'])->middleware('dashboard_access:branch_manager,record_walkins')->name('manager.walkins.store');
 });
@@ -112,6 +131,8 @@ Route::middleware(['auth', 'verified', 'role:Barber'])->group(function () {
     Route::middleware('active_plan')->group(function () {
         Route::get('/barber', [BarberDashboardController::class, 'index'])->middleware('dashboard_access:barber,view_dashboard')->name('barber.dashboard');
         Route::post('/barber/appointments/{booking}/status', [BarberDashboardController::class, 'updateStatus'])->middleware('dashboard_access:barber,update_appointment_status')->name('barber.appointments.status');
+        Route::post('/barber/points/redeem', [BarberPointsController::class, 'redeem'])->name('barber.points.redeem');
+        Route::post('/barber/cashouts', [BarberCashoutController::class, 'store'])->name('barber.cashouts.store');
     });
 });
 
@@ -180,7 +201,10 @@ Route::prefix('customer')->name('customer.')->middleware(['auth', 'verified', 'r
         Route::get('/bookings', [App\Http\Controllers\Customer\BookingController::class, 'index'])->name('bookings');
         Route::delete('/bookings/{booking}/cancel', [App\Http\Controllers\Customer\BookingController::class, 'cancel'])->name('bookings.cancel');
         Route::patch('/bookings/{booking}/reschedule', [App\Http\Controllers\Customer\BookingController::class, 'reschedule'])->name('bookings.reschedule');
+        Route::post('/bookings/{booking}/decision', [App\Http\Controllers\Customer\BookingController::class, 'respondEmergencyDecision'])->name('bookings.decision');
         Route::post('/bookings/{booking}/feedback', [App\Http\Controllers\Customer\BookingController::class, 'submitFeedback'])->name('bookings.feedback');
+
+        Route::post('/points/redeem', [App\Http\Controllers\Customer\PointsController::class, 'redeem'])->name('points.redeem');
     });
     Route::get('/points', [App\Http\Controllers\Customer\PointsController::class, 'index'])->name('points');
     Route::get('/profile', [App\Http\Controllers\Customer\ProfileController::class, 'edit'])->name('profile');

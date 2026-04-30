@@ -265,7 +265,7 @@
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-6 border-b border-gray-100">
                         <h3 class="text-lg font-semibold text-slate-800">System Update Center</h3>
-                        <p class="text-sm text-slate-500 mt-1">Apply new central releases or hold specific updates when needed.</p>
+                        <p class="text-sm text-slate-500 mt-1">Review available central releases and choose whether to apply or hold each update.</p>
                     </div>
 
                     <div class="p-6 space-y-4">
@@ -960,6 +960,245 @@
                                             @empty
                                                 <tr>
                                                     <td colspan="3" class="px-4 py-6 text-center text-slate-400">No customers found.</td>
+                                                </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            @if ($hasActivePlan && ($canOperateBranch ?? false))
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-slate-800">Cash Bonus Requests</h3>
+                        <p class="text-sm text-slate-500 mt-1">Approve and record payouts for barbers in your branch.</p>
+                    </div>
+
+                    <div class="p-6 space-y-4">
+                        @if (session('cashout_status'))
+                            <div class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm">
+                                {{ session('cashout_status') }}
+                            </div>
+                        @endif
+
+                        @if (session('cashout_error'))
+                            <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+                                {{ session('cashout_error') }}
+                            </div>
+                        @endif
+
+                        <div class="overflow-x-auto rounded-xl border border-slate-100">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-slate-50 text-slate-500">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Barber</th>
+                                        <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Requested</th>
+                                        <th class="px-4 py-3 text-right text-xs uppercase tracking-wider">Points</th>
+                                        <th class="px-4 py-3 text-right text-xs uppercase tracking-wider">Amount</th>
+                                        <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Status</th>
+                                        <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 bg-white">
+                                    @forelse (($branchCashouts ?? collect()) as $cashout)
+                                        <tr>
+                                            <td class="px-4 py-3 text-slate-800 font-medium">{{ $cashout->barber_name }}</td>
+                                            <td class="px-4 py-3 text-slate-600">{{ \Illuminate\Support\Carbon::parse($cashout->created_at)->format('M d, Y') }}</td>
+                                            <td class="px-4 py-3 text-right font-mono text-slate-800">{{ (int) $cashout->points }}</td>
+                                            <td class="px-4 py-3 text-right font-mono text-slate-800">PHP {{ number_format((float) $cashout->amount_php, 2) }}</td>
+                                            <td class="px-4 py-3">
+                                                <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold capitalize
+                                                    {{ $cashout->status === 'paid' ? 'bg-emerald-50 text-emerald-700' : ($cashout->status === 'approved' ? 'bg-indigo-50 text-indigo-700' : ($cashout->status === 'rejected' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700')) }}">
+                                                    {{ $cashout->status }}
+                                                </span>
+                                                @if ($cashout->status === 'rejected' && ! empty($cashout->rejection_reason))
+                                                    <p class="text-xs text-slate-500 mt-1">Reason: {{ $cashout->rejection_reason }}</p>
+                                                @endif
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <div class="flex flex-col gap-2">
+                                                    @if ($cashout->status === 'pending')
+                                                        <form method="POST" action="{{ route('manager.cashouts.approve', ['cashout' => $cashout->id]) }}">
+                                                            @csrf
+                                                            <button type="submit" class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800">
+                                                                Approve (Deduct Points)
+                                                            </button>
+                                                        </form>
+
+                                                        <form method="POST" action="{{ route('manager.cashouts.reject', ['cashout' => $cashout->id]) }}" class="space-y-2">
+                                                            @csrf
+                                                            <input name="reason" type="text" maxlength="255" class="w-full rounded-md border-slate-200 bg-slate-50 text-xs focus:border-blue-500 focus:ring-blue-500" placeholder="Reject reason (optional)">
+                                                            <button type="submit" class="rounded-md bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 border border-rose-200">
+                                                                Reject
+                                                            </button>
+                                                        </form>
+                                                    @elseif ($cashout->status === 'approved')
+                                                        <form method="POST" action="{{ route('manager.cashouts.paid', ['cashout' => $cashout->id]) }}" onsubmit="return confirm('Mark this cashout as paid?');">
+                                                            @csrf
+                                                            <button type="submit" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500">
+                                                                Mark Paid
+                                                            </button>
+                                                        </form>
+                                                    @else
+                                                        <span class="text-xs text-slate-400">No actions</span>
+                                                    @endif
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="6" class="px-4 py-6 text-center text-slate-400">No cash bonus requests for your branch.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            @if ($hasActivePlan && ($canManageUsers ?? false))
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-slate-800">Points Management</h3>
+                        <p class="text-sm text-slate-500 mt-1">Adjust customer and barber points usage.</p>
+                    </div>
+
+                    <div class="p-6 space-y-6">
+                        @if (session('points_status'))
+                            <div class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm">
+                                {{ session('points_status') }}
+                            </div>
+                        @endif
+
+                        @if (session('points_error'))
+                            <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+                                {{ session('points_error') }}
+                            </div>
+                        @endif
+
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <div class="rounded-xl border border-slate-100 overflow-hidden">
+                                <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                                    <h4 class="text-sm font-semibold text-slate-800">Adjust Customer Points</h4>
+                                </div>
+                                <div class="p-4">
+                                    <form method="POST" action="{{ route('manager.points.customers.adjust') }}" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                                        @csrf
+                                        <div>
+                                            <label for="points_customer_id" class="block text-sm font-medium text-slate-600">Customer</label>
+                                            <select id="points_customer_id" name="customer_id" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
+                                                <option value="">Select customer</option>
+                                                @foreach ($manageableCustomers as $managedCustomer)
+                                                    <option value="{{ $managedCustomer->id }}">{{ $managedCustomer->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label for="points_customer_delta" class="block text-sm font-medium text-slate-600">Delta (+/-)</label>
+                                            <input id="points_customer_delta" name="delta" type="number" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., -100">
+                                        </div>
+                                        <div>
+                                            <label for="points_customer_notes" class="block text-sm font-medium text-slate-600">Notes (optional)</label>
+                                            <input id="points_customer_notes" name="notes" type="text" maxlength="255" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., Redeemed reward">
+                                        </div>
+                                        <div class="md:col-span-3">
+                                            <button type="submit" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                                                Update Customer Points
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-100 overflow-hidden">
+                                <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                                    <h4 class="text-sm font-semibold text-slate-800">Adjust Barber Points</h4>
+                                </div>
+                                <div class="p-4">
+                                    <form method="POST" action="{{ route('manager.points.barbers.adjust') }}" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                                        @csrf
+                                        <div>
+                                            <label for="points_barber_id" class="block text-sm font-medium text-slate-600">Barber</label>
+                                            <select id="points_barber_id" name="barber_id" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500">
+                                                <option value="">Select barber</option>
+                                                @foreach ($manageableBarbers as $managedBarber)
+                                                    <option value="{{ $managedBarber->id }}">{{ $managedBarber->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label for="points_barber_delta" class="block text-sm font-medium text-slate-600">Delta (+/-)</label>
+                                            <input id="points_barber_delta" name="delta" type="number" required class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., -50">
+                                        </div>
+                                        <div>
+                                            <label for="points_barber_reason" class="block text-sm font-medium text-slate-600">Reason (optional)</label>
+                                            <input id="points_barber_reason" name="reason" type="text" maxlength="255" class="mt-1 w-full rounded-md border-slate-200 bg-slate-50 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., Redeemed item">
+                                        </div>
+                                        <div class="md:col-span-3">
+                                            <button type="submit" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                                                Update Barber Points
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <div class="rounded-xl border border-slate-100 overflow-hidden">
+                                <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                                    <h4 class="text-sm font-semibold text-slate-800">Customer Balances</h4>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full text-sm">
+                                        <thead class="bg-slate-50 text-slate-500">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Name</th>
+                                                <th class="px-4 py-3 text-right text-xs uppercase tracking-wider">Points</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100 bg-white">
+                                            @forelse ($manageableCustomers as $managedCustomer)
+                                                <tr>
+                                                    <td class="px-4 py-3 text-slate-800 font-medium">{{ $managedCustomer->name }}</td>
+                                                    <td class="px-4 py-3 text-right text-slate-700 font-mono">{{ (int) ($managedCustomer->points_balance ?? 0) }}</td>
+                                                </tr>
+                                            @empty
+                                                <tr>
+                                                    <td colspan="2" class="px-4 py-6 text-center text-slate-400">No customers found.</td>
+                                                </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-100 overflow-hidden">
+                                <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                                    <h4 class="text-sm font-semibold text-slate-800">Barber Totals</h4>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full text-sm">
+                                        <thead class="bg-slate-50 text-slate-500">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Barber</th>
+                                                <th class="px-4 py-3 text-right text-xs uppercase tracking-wider">Points</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100 bg-white">
+                                            @forelse ($barberPoints as $barberPoint)
+                                                <tr>
+                                                    <td class="px-4 py-3 text-slate-800 font-medium">{{ $barberPoint->barber_name }}</td>
+                                                    <td class="px-4 py-3 text-right text-slate-700 font-mono">{{ (int) ($barberPoint->total_points ?? 0) }}</td>
+                                                </tr>
+                                            @empty
+                                                <tr>
+                                                    <td colspan="2" class="px-4 py-6 text-center text-slate-400">No barber points found.</td>
                                                 </tr>
                                             @endforelse
                                         </tbody>
